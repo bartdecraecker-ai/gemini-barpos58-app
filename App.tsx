@@ -36,7 +36,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { jsPDF } from "jspdf";
 import { Product, CartItem, Transaction, PaymentMethod, CompanyDetails, DailySummary, CashEntry, SalesSession } from './types';
 import { DEFAULT_COMPANY, INITIAL_PRODUCTS, AVAILABLE_COLORS } from './constants';
-import { Receipt } from './components/Receipt';
+import { Receipt } from './components/Receipt.tsx';
 import { generateDailyInsight } from './services/geminiService';
 import { btPrinterService } from './services/bluetoothPrinter';
 
