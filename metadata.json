@@ -1,0 +1,8 @@
+
+{
+  "name": "BarPOS 58",
+  "description": "A lightweight Point of Sale system for bars with 58mm thermal printing support, daily reports, and Gemini AI sales insights.",
+  "requestFramePermissions": [
+    "bluetooth"
+  ]
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BarPOS 58</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono&display=swap');
+      
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+
+      /* Print Styles for 58mm Paper */
+      @media print {
+        @page {
+          margin: 0;
+          size: 58mm auto; 
+        }
+        body * {
+          visibility: hidden;
+        }
+        #receipt-print-area, #receipt-print-area * {
+          visibility: visible;
+        }
+        #receipt-print-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 58mm;
+          padding: 2mm;
+          background: white;
+          color: black;
+          font-family: 'Space Mono', monospace;
+          font-size: 12px;
+          line-height: 1.2;
+        }
+        .no-print {
+          display: none !important;
+        }
+      }
+
+      /* Animation Utilities */
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes zoomIn95 { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+      @keyframes zoomIn50 { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+      @keyframes slideUp { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+      .animate-in { animation-fill-mode: both; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+      .fade-in { animation-name: fadeIn; }
+      .zoom-in-95 { animation-name: zoomIn95; }
+      .zoom-in-50 { animation-name: zoomIn50; }
+      .slide-in-from-bottom-4 { animation-name: slideUp; }
+      .duration-200 { animation-duration: 200ms; }
+      .duration-300 { animation-duration: 300ms; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1/dist/jspdf.es.min.js"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-slate-100 text-slate-900">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
