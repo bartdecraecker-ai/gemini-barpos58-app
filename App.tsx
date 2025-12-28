@@ -254,7 +254,7 @@ export default function App() {
       return prev.map(item => {
         if (item.id === id) {
           const newQ = item.quantity + delta;
-          return newQ > 0 ? { ...item, quantity: newQ } : item;
+          return { ...item, quantity: newQ };
         }
         return item;
       });
