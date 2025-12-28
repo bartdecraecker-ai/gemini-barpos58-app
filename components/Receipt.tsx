@@ -1,147 +1,107 @@
-
 import React from 'react';
 import { Transaction, CompanyDetails, SalesSession } from '../types';
 
 interface ReceiptProps {
-  transaction: Transaction | null;
-  sessionReport?: SalesSession | null;
+  transaction?: Transaction | null;
   company: CompanyDetails;
-  openDrawer?: boolean;
   preview?: boolean;
+  sessionSummary?: SalesSession | null; // Nieuw: om sessie-data te ontvangen
 }
 
-export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDrawer, preview = false }) => {
-  
-  const containerStyle: React.CSSProperties = {
-    fontFamily: '"Space Mono", monospace',
-    fontSize: '12px',
-    lineHeight: '1.2',
-    width: '58mm',
-    background: 'white',
-    color: 'black',
-    padding: '2mm',
-    ...(preview ? { margin: '0 auto', boxShadow: '0 0 10px rgba(0,0,0,0.1)' } : {})
-  };
-
-  const Wrapper = ({ children }: React.PropsWithChildren<{}>) => {
-    if (preview) {
-      return <div style={containerStyle} className="receipt-preview">{children}</div>;
-    }
-    return (
-      <div id="receipt-print-area" className="hidden print:block">
-         {children}
-      </div>
-    );
-  };
-
-  if (openDrawer) {
-     const now = new Date();
-     const dateStr = now.toLocaleDateString('nl-NL');
-     const timeStr = now.toLocaleTimeString('nl-NL', {
-       hour: '2-digit',
-       minute: '2-digit'
-     });
-
-     return (
-       <Wrapper>
-         <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">
-           {company.name}
-         </div>
-         <div className="text-center mb-2 text-xs">
-           {dateStr} {timeStr}
-         </div>
-         <div className="text-center font-bold text-lg my-6">
-           * LADE OPEN *
-         </div>
-         <div className="text-center text-[10px]">.</div>
-       </Wrapper>
-     );
-  }
-
-  if (!transaction) return null;
-
-  const timeStr = new Date(transaction.timestamp).toLocaleTimeString('nl-NL', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, preview, sessionSummary }) => {
+  const isSessionReport = !!sessionSummary;
+  const data = isSessionReport ? sessionSummary?.summary : null;
 
   return (
-    <Wrapper>
-      <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">
-        {company.name}
-      </div>
-      <div className="text-center mb-2 text-xs">
-        {company.address}
-        {company.address2 && <><br />{company.address2}</>}
-        <br />
-        BTW: {company.vatNumber}
-        {company.website && (
-          <>
-            <br />
-            {company.website}
-          </>
-        )}
-        {company.sellerName && (
-          <>
-            <br />
-            Verkoper: {company.sellerName}
-          </>
-        )}
-      </div>
-      
-      <div className="border-b border-dashed border-black pb-1 mb-2 text-xs">
-        <div className="flex justify-between">
-           <span>{transaction.dateStr} {timeStr}</span>
-        </div>
-        <div className="flex justify-between font-bold">
-          <span>Ticket #:</span>
-          <span>{transaction.id}</span>
-        </div>
+    <div className={`receipt-container ${preview ? 'preview-mode' : ''}`} style={{ 
+      width: '100%', 
+      maxWidth: '300px', 
+      margin: '0 auto', 
+      padding: '10px', 
+      backgroundColor: '#fff', 
+      color: '#000', 
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      lineHeight: '1.4'
+    }}>
+      {/* Header */}
+      <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+        <h2 style={{ margin: '0', fontSize: '16px', fontWeight: 'bold' }}>{company.name}</h2>
+        <p style={{ margin: '0' }}>{company.address}</p>
+        <p style={{ margin: '0' }}>BTW: {company.vatNumber}</p>
+        <p style={{ margin: '0' }}>Tel: {company.phone}</p>
       </div>
 
-      <div className="mb-2">
-        {transaction.items.map((item, idx) => (
-          <div key={idx} className="flex justify-between text-xs mb-1">
-            <span className="truncate w-32">
-              {item.quantity}x {item.name}
-            </span>
-            <span>{(item.price * item.quantity).toFixed(2).replace('.', ',')}</span>
+      <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+
+      {/* Content: Transactie OF Sessie Rapport */}
+      {!isSessionReport && transaction ? (
+        <>
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Ticket: {transaction.id}</span>
+              <span>{new Date(transaction.timestamp).toLocaleTimeString('nl-NL')}</span>
+            </div>
+            <span>Datum: {transaction.dateStr}</span>
           </div>
-        ))}
-      </div>
 
-      <div className="border-t border-black pt-2 mb-2">
-        <div className="flex justify-between text-xs mb-1">
-           <span>Totaal excl. BTW</span>
-           <span>EUR {(transaction.subtotal).toFixed(2).replace('.', ',')}</span>
-        </div>
-        <div className="flex justify-between font-bold text-sm">
+          <div style={{ marginBottom: '10px' }}>
+            {transaction.items.map((item, index) => (
+              <div key={index} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>{item.quantity}x {item.name}</span>
+                <span>€{(item.price * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Sessie Samenvatting Header */}
+          <div style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '10px' }}>
+            *** DAGRAPPORT ***
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+             Sessie: {sessionSummary?.id.slice(-6)}<br />
+             Start: {new Date(sessionSummary?.startTime || 0).toLocaleString('nl-NL')}<br />
+             Einde: {new Date().toLocaleString('nl-NL')}
+          </div>
+
+          {/* PRODUCT OVERZICHT: Hier komen de getelde aantallen */}
+          {data?.productSales && (
+            <div style={{ borderTop: '1px solid #000', paddingTop: '5px', marginBottom: '10px' }}>
+              <div style={{ textAlign: 'center', fontWeight: 'bold', marginBottom: '5px' }}>PRODUCT VERKOOP</div>
+              {Object.entries(data.productSales).map(([name, qty]) => (
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{name}</span>
+                  <span style={{ fontWeight: 'bold' }}>{qty as number}x</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+
+      {/* Totals Section */}
+      <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span>TOTAAL</span>
-          <span>EUR {transaction.total.toFixed(2).replace('.', ',')}</span>
-        </div>
-        <div className="flex justify-between text-xs mt-1">
-          <span>Betaald via {transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART'}</span>
+          <span>€{(isSessionReport ? data?.totalSales : transaction?.total || 0).toFixed(2)}</span>
         </div>
       </div>
 
-      <div className="border-t border-dashed border-black pt-1 mb-2 text-[10px]">
-        {transaction.vat0 > 0 && (
-          <div className="flex justify-between">
-            <span>BTW 0% (basis EUR {transaction.vat0.toFixed(2).replace('.', ',')})</span>
-            <span>0,00</span>
-          </div>
-        )}
-        {transaction.vat21 > 0 && (
-          <div className="flex justify-between">
-            <span>BTW 21% (basis EUR {(transaction.subtotal - transaction.vat0).toFixed(2).replace('.', ',')})</span>
-            <span>{transaction.vat21.toFixed(2).replace('.', ',')}</span>
-          </div>
-        )}
-      </div>
+      {!isSessionReport && (
+        <div style={{ marginTop: '5px', fontSize: '10px' }}>
+          <span>Betaalmethode: {transaction?.paymentMethod}</span>
+        </div>
+      )}
 
-      <div className="text-center text-xs mt-4">
-        {company.footerMessage}
+      {/* Footer */}
+      <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px' }}>
+        <p>Bedankt voor uw bezoek!</p>
+        <p>BarPOS58 - {new Date().getFullYear()}</p>
       </div>
-    </Wrapper>
+    </div>
   );
 };
