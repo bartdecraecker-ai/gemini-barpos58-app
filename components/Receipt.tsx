@@ -2,132 +2,144 @@ import React from 'react';
 import { Transaction, CompanyDetails, SalesSession } from '../types';
 
 interface ReceiptProps {
-  transaction?: Transaction | null;
+  transaction: Transaction | null;
+  sessionReport?: SalesSession | null; // Nieuw: voor dagrapporten
   company: CompanyDetails;
+  openDrawer?: boolean;
   preview?: boolean;
-  sessionSummary?: SalesSession | null;
 }
 
-export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, preview, sessionSummary }) => {
-  const isSessionReport = !!sessionSummary;
-  const data = isSessionReport ? sessionSummary?.summary : null;
-
-  // Inline styling voor thermische print optimalisatie
-  const style: Record<string, React.CSSProperties> = {
-    container: {
-      width: '100%',
-      maxWidth: '300px',
-      margin: '0 auto',
-      padding: '5px',
-      backgroundColor: '#fff',
-      color: '#000',
-      fontFamily: '"Courier New", Courier, monospace',
-      fontSize: '12px',
-      lineHeight: '1.2'
-    },
-    header: { textAlign: 'center', marginBottom: '10px' },
-    divider: { borderBottom: '1px dashed #000', margin: '8px 0' },
-    row: { display: 'flex', justifyContent: 'space-between', marginBottom: '2px' },
-    bold: { fontWeight: 'bold' },
-    footer: { textAlign: 'center', marginTop: '15px', fontSize: '10px' }
+export const Receipt: React.FC<ReceiptProps> = ({ transaction, sessionReport, company, openDrawer, preview = false }) => {
+  
+  const containerStyle: React.CSSProperties = {
+    fontFamily: '"Space Mono", monospace',
+    fontSize: '12px',
+    lineHeight: '1.2',
+    width: '58mm',
+    background: 'white',
+    color: 'black',
+    padding: '2mm',
+    ...(preview ? { margin: '0 auto', boxShadow: '0 0 10px rgba(0,0,0,0.1)' } : {})
   };
 
-  return (
-    <div style={style.container} className={preview ? 'receipt-preview' : ''}>
-      {/* Bedrijfsgegevens */}
-      <div style={style.header}>
-        <div style={{ ...style.bold, fontSize: '16px' }}>{company.name}</div>
-        <div>{company.address}</div>
-        <div>{company.vatNumber}</div>
-        {company.phone && <div>Tel: {company.phone}</div>}
+  const Wrapper = ({ children }: React.PropsWithChildren<{}>) => {
+    if (preview) {
+      return <div style={containerStyle} className="receipt-preview">{children}</div>;
+    }
+    return (
+      <div id="receipt-print-area" className="hidden print:block">
+         <div style={containerStyle}>{children}</div>
       </div>
+    );
+  };
 
-      <div style={style.divider}></div>
+  // --- LOGICA VOOR LADE OPENEN ---
+  if (openDrawer) {
+     const now = new Date();
+     return (
+       <Wrapper>
+         <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">{company.name}</div>
+         <div className="text-center mb-2 text-xs">{now.toLocaleDateString('nl-NL')} {now.toLocaleTimeString('nl-NL')}</div>
+         <div className="text-center font-bold text-lg my-6">* LADE OPEN *</div>
+       </Wrapper>
+     );
+  }
 
-      {isSessionReport ? (
-        /* --- DAGRAPPORT LAYOUT --- */
-        <div style={{ fontSize: '11px' }}>
-          <div style={{ ...style.bold, textAlign: 'center', marginBottom: '5px' }}>*** DAGRAPPORT (Z-REPORT) ***</div>
-          <div style={style.row}><span>Sessie ID:</span><span>{sessionSummary?.id.slice(-6)}</span></div>
-          <div style={style.row}><span>Start:</span><span>{new Date(sessionSummary?.startTime || 0).toLocaleString('nl-NL')}</span></div>
-          {sessionSummary?.endTime && (
-            <div style={style.row}><span>Einde:</span><span>{new Date(sessionSummary.endTime).toLocaleString('nl-NL')}</span></div>
-          )}
-          
-          <div style={style.divider}></div>
-          
-          {/* PRODUCT TOTALEN (Dit is wat je wilde zien) */}
-          <div style={{ ...style.bold, textAlign: 'center', margin: '5px 0' }}>PRODUCT VERKOOP OVERZICHT</div>
-          {data?.productSales && Object.entries(data.productSales).length > 0 ? (
-            Object.entries(data.productSales).map(([name, qty]) => (
-              <div key={name} style={style.row}>
-                <span>{name}</span>
-                <span style={style.bold}>{qty as number}x</span>
-              </div>
-            ))
-          ) : (
-            <div style={{ textAlign: 'center' }}>Geen producten verkocht</div>
-          )}
-
-          <div style={style.divider}></div>
-
-          {/* FINANCIEEL OVERZICHT */}
-          <div style={style.row}><span>Aantal transacties:</span><span>{data?.transactionCount}</span></div>
-          <div style={style.row}><span>Cash Omzet:</span><span>€{data?.cashTotal.toFixed(2)}</span></div>
-          <div style={style.row}><span>Card Omzet:</span><span>€{data?.cardTotal.toFixed(2)}</span></div>
-          <div style={{ ...style.row, ...style.bold, fontSize: '14px', marginTop: '5px' }}>
-            <span>TOTAAL OMZET</span>
-            <span>€{data?.totalSales.toFixed(2)}</span>
-          </div>
+  // --- NIEUW: LOGICA VOOR DAGRAPPORT (Z-RAPPORT) ---
+  if (sessionReport) {
+    return (
+      <Wrapper>
+        <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">*** DAGRAPPORT ***<br/>{company.name}</div>
+        <div className="text-xs mb-4">
+          Datum: {new Date().toLocaleDateString('nl-NL')}<br/>
+          Sessie: {sessionReport.id}
         </div>
-      ) : (
-        /* --- KLANT TICKET LAYOUT --- */
-        <>
-          <div style={{ marginBottom: '8px' }}>
-            <div style={style.row}><span>Bon nr: {transaction?.id}</span><span>{transaction?.dateStr}</span></div>
-            <div style={style.row}><span>Tijd:</span><span>{new Date(transaction?.timestamp || 0).toLocaleTimeString('nl-NL')}</span></div>
-            <div style={style.row}><span>Verkoper:</span><span>{company.sellerName || 'Algemeen'}</span></div>
-          </div>
+        
+        <div className="border-b border-black pb-1 mb-2 font-bold">OMZET PER METHODE</div>
+        <div className="flex justify-between text-xs">
+          <span>CONTANT:</span>
+          <span>EUR {sessionReport.totalCash?.toFixed(2).replace('.', ',')}</span>
+        </div>
+        <div className="flex justify-between text-xs mb-2">
+          <span>KAART:</span>
+          <span>EUR {sessionReport.totalCard?.toFixed(2).replace('.', ',')}</span>
+        </div>
 
-          <div style={style.divider}></div>
+        <div className="border-t border-black pt-1 flex justify-between font-bold">
+          <span>TOTAAL OMZET:</span>
+          <span>EUR {sessionReport.totalRevenue?.toFixed(2).replace('.', ',')}</span>
+        </div>
 
-          {/* Artikelen */}
-          <div style={{ minHeight: '50px' }}>
-            {transaction?.items.map((item, idx) => (
-              <div key={idx} style={style.row}>
-                <span>{item.quantity}x {item.name}</span>
-                <span>€{(item.price * item.quantity).toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
+        <div className="text-center text-[10px] mt-8 border-t border-dashed pt-4">
+          Einde rapportage
+        </div>
+      </Wrapper>
+    );
+  }
 
-          <div style={style.divider}></div>
+  // --- STANDAARD KASSABON ---
+  if (!transaction) return null;
 
-          {/* Totalen */}
-          <div style={{ ...style.row, ...style.bold, fontSize: '14px' }}>
-            <span>TOTAAL</span>
-            <span>€{transaction?.total.toFixed(2)}</span>
-          </div>
-          
-          <div style={{ ...style.row, fontSize: '10px', marginTop: '4px' }}>
-            <span>Betaalwijze:</span>
-            <span>{transaction?.paymentMethod}</span>
-          </div>
+  const timeStr = new Date(transaction.timestamp).toLocaleTimeString('nl-NL', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 
-          {/* BTW Specificatie */}
-          <div style={{ fontSize: '9px', marginTop: '8px' }}>
-            <div style={style.row}><span>BTW 21%:</span><span>€{transaction?.vat21.toFixed(2)}</span></div>
-            <div style={style.row}><span>BTW 0%:</span><span>€{transaction?.vat0.toFixed(2)}</span></div>
-          </div>
-        </>
-      )}
-
-      {/* Footer */}
-      <div style={style.footer}>
-        <p style={{ margin: '0' }}>Bedankt voor uw bezoek!</p>
-        <p style={{ margin: '0' }}>{new Date().getFullYear()} - {company.name}</p>
-        {!isSessionReport && <p style={{ marginTop: '5px' }}>Heeft u vragen? Contacteer ons.</p>}
+  return (
+    <Wrapper>
+      <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">
+        {company.name}
       </div>
-    </div>
+      <div className="text-center mb-2 text-[10px]">
+        {company.address}
+        {company.address2 && <><br />{company.address2}</>}
+        <br />
+        BTW: {company.vatNumber}
+        {company.sellerName && <><br />Verkoper: {company.sellerName}</>}
+      </div>
+      
+      <div className="border-b border-dashed border-black pb-1 mb-2 text-[11px]">
+        <div className="flex justify-between">
+           <span>{transaction.dateStr} {timeStr}</span>
+        </div>
+        <div className="flex justify-between font-bold">
+          <span>Ticket #: {transaction.id}</span>
+        </div>
+      </div>
+
+      <div className="mb-2">
+        {transaction.items.map((item, idx) => (
+          <div key={idx} className="flex justify-between text-[11px] mb-1">
+            <span className="truncate pr-2 flex-1">
+              {item.quantity}x {item.name}
+            </span>
+            <span>{(item.price * item.quantity).toFixed(2).replace('.', ',')}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-black pt-2 mb-2">
+        <div className="flex justify-between font-bold text-sm">
+          <span>TOTAAL</span>
+          <span>EUR {transaction.total.toFixed(2).replace('.', ',')}</span>
+        </div>
+        <div className="text-[10px] mt-1 italic">
+          Betaald: {transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART'}
+        </div>
+      </div>
+
+      <div className="border-t border-dashed border-black pt-1 text-[9px]">
+        {transaction.vat21 > 0 && (
+          <div className="flex justify-between">
+            <span>BTW 21% over EUR {transaction.subtotal?.toFixed(2).replace('.', ',')}</span>
+            <span>{transaction.vat21.toFixed(2).replace('.', ',')}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="text-center text-[10px] mt-4 italic">
+        {company.footerMessage || 'Bedankt voor je bezoek!'}
+      </div>
+    </Wrapper>
   );
 };
