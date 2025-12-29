@@ -15,23 +15,19 @@ import {
   Edit2,
   X,
   RotateCcw,
-  Unlock,
   CheckCircle,
   Lock,
   User,
   Users,
   ChevronDown,
   Clock,
-  Download,
   Eye,
   Bluetooth,
   AlertTriangle,
   Loader2,
   PlayCircle,
-  ArrowRight,
   UserPlus,
   Globe,
-  FileText,
   Tag
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -335,9 +331,13 @@ export default function App() {
       alert("Voer een geldig startbedrag in.");
       return;
     }
+
+    const now = new Date();
+    const datePart = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
+    const timePart = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0');
     
     const newSession: SalesSession = {
-      id: Date.now().toString(),
+      id: `S-${datePart}-${timePart}`,
       startTime: Date.now(),
       startCash: startFloat,
       status: 'OPEN'
@@ -412,11 +412,26 @@ export default function App() {
 
   const processPayment = async (method: PaymentMethod) => {
     if (cart.length === 0 || !currentSession) return;
+    
+    // STRICT SEQUENTIAL ID LOGIC
     const now = new Date();
     const year = now.getFullYear();
     const idPrefix = `AM${year}-`;
-    const existingSeqs = transactions.filter(t => t.id.startsWith(idPrefix)).map(t => parseInt(t.id.split('-')[1])).filter(n => !isNaN(n));
-    const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 1;
+    
+    // Retrieve the absolute last sequence number used
+    const savedSeq = localStorage.getItem('barpos_last_seq');
+    let lastSeq = savedSeq ? parseInt(savedSeq) : 0;
+
+    // Safety fallback: if sequence is 0, initialize it from existing transactions
+    if (lastSeq === 0) {
+      const yearTx = transactions.filter(t => t.id.startsWith(idPrefix));
+      const seqs = yearTx.map(t => parseInt(t.id.split('-')[1])).filter(n => !isNaN(n));
+      if (seqs.length > 0) lastSeq = Math.max(...seqs);
+    }
+
+    const nextSeq = lastSeq + 1;
+    // Update the sequence immediately
+    localStorage.setItem('barpos_last_seq', nextSeq.toString());
     const newId = `${idPrefix}${String(nextSeq).padStart(4, '0')}`;
     
     const updatedProducts = products.map(product => {
@@ -663,8 +678,7 @@ export default function App() {
            <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95">
               <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                  <div>
-                   <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><History size={20} className="text-blue-500" /> Sessie {viewingSession.id.slice(-6)}</h3>
-                   <div className="text-[10px] text-slate-400 font-mono mt-0.5">{viewingSession.id}</div>
+                   <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><History size={20} className="text-blue-500" /> Sessie {viewingSession.id}</h3>
                  </div>
                  <div className="flex items-center gap-2">
                     <button 
@@ -688,7 +702,22 @@ export default function App() {
                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                         <div className="text-slate-400 uppercase font-bold tracking-widest text-[9px] mb-1">Financieel</div>
                         <div>Omzet: <span className="font-bold text-slate-900">€{viewingSession.summary?.totalSales.toFixed(2)}</span></div>
-                        <div>Kas: <span className="font-bold text-green-600">€{viewingSession.endCash?.toFixed(2) || '0.00'}</span></div>
+                        
+                        {/* CASH/CARD SPLIT IN HISTORY */}
+                        <div className="mt-1 pt-1 border-t border-slate-200">
+                           <div className="flex justify-between items-center py-0.5">
+                             <span className="flex items-center gap-1"><Banknote size={10} className="text-green-500" /> Cash:</span> 
+                             <span className="font-bold">€{viewingSession.summary?.cashTotal.toFixed(2)}</span>
+                           </div>
+                           <div className="flex justify-between items-center py-0.5">
+                             <span className="flex items-center gap-1"><CreditCard size={10} className="text-blue-500" /> Kaart:</span> 
+                             <span className="font-bold">€{viewingSession.summary?.cardTotal.toFixed(2)}</span>
+                           </div>
+                        </div>
+
+                        <div className="mt-1 pt-1 border-t border-slate-200">
+                          Lade Kas: <span className="font-bold text-green-600">€{viewingSession.endCash?.toFixed(2) || '0.00'}</span>
+                        </div>
                      </div>
                  </div>
 
@@ -904,7 +933,7 @@ export default function App() {
                  {sessions.filter(s => s.status === 'CLOSED').slice().reverse().map(s => (
                    <div key={s.id} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm hover:border-amber-200 transition-all group cursor-pointer" onClick={() => setViewingSession(s)}>
                       <div>
-                        <div className="font-bold group-hover:text-amber-600 transition-colors">Sessie {s.id.slice(-6)}</div>
+                        <div className="font-bold group-hover:text-amber-600 transition-colors">Sessie {s.id}</div>
                         <div className="text-xs text-slate-400 mt-0.5">{new Date(s.startTime).toLocaleDateString('nl-NL')}</div>
                       </div>
                       <div className="text-right">
@@ -920,7 +949,6 @@ export default function App() {
         {activeTab === 'SETTINGS' && (
            <div className="h-full overflow-y-auto p-4 md:p-6 max-w-4xl mx-auto">
               <h2 className="text-2xl font-bold mb-6">Instellingen</h2>
-              {/* ... Settings Content ... */}
               <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border mb-6">
                  <div className="flex justify-between items-center mb-6">
                    <h3 className="font-bold flex items-center gap-2 text-slate-700"><ShoppingBag size={20} className="text-amber-500"/> Producten</h3>
@@ -941,8 +969,86 @@ export default function App() {
                    ))}
                  </div>
               </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border">
+
+              <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border mb-6">
+                <div className="flex justify-between items-center mb-6">
+                   <h3 className="font-bold flex items-center gap-2 text-slate-700"><Users size={20} className="text-amber-500"/> Verkopers Beheren</h3>
+                 </div>
+                 <div className="space-y-4">
+                    <div className="flex gap-2 bg-slate-50 p-4 rounded-xl border border-dashed border-slate-300">
+                      <input 
+                        type="text" 
+                        value={newSalesmanName} 
+                        onChange={e => setNewSalesmanName(e.target.value)}
+                        className="flex-1 border p-2 rounded-lg text-sm outline-none focus:border-amber-500" 
+                        placeholder="Naam nieuwe verkoper..." 
+                        onKeyDown={e => e.key === 'Enter' && addSalesman()}
+                      />
+                      <button onClick={addSalesman} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-slate-800 transition-colors">
+                        <UserPlus size={16} /> Toevoegen
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {(company.salesmen || []).map(name => (
+                        <div key={name} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-all group">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500"><User size={16} /></div>
+                            <span className="font-medium text-slate-700">{name}</span>
+                          </div>
+                          <button onClick={() => removeSalesman(name)} className="text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                 <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+                   <h3 className="font-bold mb-4 text-slate-700 flex items-center gap-2"><Edit2 size={20} className="text-amber-500" /> Bedrijf</h3>
+                   <div className="space-y-3">
+                     <div>
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Naam</label>
+                       <input type="text" value={company.name} onChange={e => setCompany({...company, name: e.target.value})} className="w-full border p-2 rounded text-sm outline-none focus:border-amber-500 transition-all" />
+                     </div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Adres Lijn 1</label>
+                          <input type="text" value={company.address} onChange={e => setCompany({...company, address: e.target.value})} className="w-full border p-2 rounded text-sm outline-none focus:border-amber-500 transition-all" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Adres Lijn 2</label>
+                          <input type="text" value={company.address2 || ''} onChange={e => setCompany({...company, address2: e.target.value})} className="w-full border p-2 rounded text-sm outline-none focus:border-amber-500 transition-all" />
+                        </div>
+                     </div>
+                     <div>
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">BTW Nummer</label>
+                       <input type="text" value={company.vatNumber} onChange={e => setCompany({...company, vatNumber: e.target.value})} className="w-full border p-2 rounded text-sm outline-none focus:border-amber-500 transition-all" />
+                     </div>
+                     <div>
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Website</label>
+                       <div className="relative">
+                         < Globe size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                         <input type="text" value={company.website || ''} onChange={e => setCompany({...company, website: e.target.value})} className="w-full border p-2 pl-10 rounded text-sm outline-none focus:border-amber-500 transition-all" placeholder="www.voorbeeld.be" />
+                       </div>
+                     </div>
+                     <div>
+                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Voetnoot Ticket</label>
+                       <textarea value={company.footerMessage} onChange={e => setCompany({...company, footerMessage: e.target.value})} className="w-full border p-2 rounded text-sm outline-none focus:border-amber-500 transition-all h-20" />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-white p-6 rounded-2xl shadow-sm border">
                    <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><Printer size={18} className="text-amber-500"/> Printer</h3>
+                   {!btSupported && (
+                     <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex gap-3 text-xs text-amber-700">
+                       <AlertTriangle size={24} className="shrink-0" />
+                       <div>
+                         <p className="font-bold mb-1">Bluetooth niet beschikbaar</p>
+                         <p>Gebruik Chrome of Edge op desktop of Android.</p>
+                       </div>
+                     </div>
+                   )}
                    <div className="mb-4 p-4 bg-slate-50 border rounded-xl">
                      <div className="flex justify-between items-center mb-2">
                        <span className="text-sm font-medium flex items-center gap-2"><Bluetooth size={16} className="text-blue-500"/> Status</span>
@@ -957,24 +1063,23 @@ export default function App() {
                          </div>
                        </div>
                      ) : (
-                       <button onClick={handleBluetoothConnect} disabled={!btSupported || isConnectingBt} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-100"><Bluetooth size={18} /> Zoek Printer</button>
+                       <button 
+                         onClick={handleBluetoothConnect} 
+                         disabled={!btSupported || isConnectingBt} 
+                         className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-100"
+                       >
+                         {isConnectingBt ? <Loader2 size={18} className="animate-spin" /> : <><Bluetooth size={18} /> Zoek Printer</>}
+                       </button>
                      )}
                    </div>
+                 </div>
               </div>
            </div>
         )}
       </main>
 
       <Receipt transaction={lastTransaction} company={company} openDrawer={isOpeningDrawer} />
-      {previewTransaction && (
-        <div className="fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-xs w-full overflow-hidden shadow-2xl animate-in zoom-in-95">
-            <div className="p-4 bg-slate-100 flex justify-between items-center border-b"><strong>Ticket</strong><button onClick={() => setPreviewTransaction(null)}><X size={20}/></button></div>
-            <div className="p-4 bg-slate-50 max-h-[60vh] overflow-y-auto flex justify-center"><Receipt preview transaction={previewTransaction} company={company} /></div>
-            <div className="p-4 flex gap-2"><button onClick={() => setPreviewTransaction(null)} className="flex-1 border p-2 rounded-xl text-sm font-bold">Sluiten</button><button onClick={() => window.print()} className="flex-1 bg-amber-500 text-white p-2 rounded-xl font-bold text-sm">Print</button></div>
-          </div>
-        </div>
-      )}
+      {previewTransaction && <div className="fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200"><div className="bg-white rounded-3xl max-w-xs w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"><div className="p-4 bg-slate-100 flex justify-between items-center border-b"><strong>Afdrukvoorbeeld</strong><button onClick={() => setPreviewTransaction(null)} className="p-1 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button></div><div className="p-4 bg-slate-50 overflow-y-auto max-h-[60vh] flex justify-center"><Receipt preview transaction={previewTransaction} company={company} /></div><div className="p-4 flex gap-2"><button onClick={() => setPreviewTransaction(null)} className="flex-1 border p-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors">Sluiten</button><button onClick={() => window.print()} className="flex-1 bg-amber-500 text-white p-2 rounded-xl font-black text-sm shadow-lg shadow-amber-200 hover:bg-amber-600 transition-colors">Nu Afdrukken</button></div></div></div>}
     </div>
   );
 }
