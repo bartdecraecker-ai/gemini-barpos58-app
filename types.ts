@@ -68,4 +68,6 @@ export interface DailySummary {
   cardTotal: number;
   vat0Total: number;
   vat21Total: number;
+  firstTicketId?: string;
+  lastTicketId?: string;
 }
