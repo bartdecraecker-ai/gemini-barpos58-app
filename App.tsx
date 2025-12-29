@@ -418,11 +418,11 @@ export default function App() {
     const year = now.getFullYear();
     const idPrefix = `AM${year}-`;
     
-    // Retrieve the absolute last sequence number used
+    // Persistent sequence counter from localStorage
     const savedSeq = localStorage.getItem('barpos_last_seq');
     let lastSeq = savedSeq ? parseInt(savedSeq) : 0;
 
-    // Safety fallback: if sequence is 0, initialize it from existing transactions
+    // Safety fallback
     if (lastSeq === 0) {
       const yearTx = transactions.filter(t => t.id.startsWith(idPrefix));
       const seqs = yearTx.map(t => parseInt(t.id.split('-')[1])).filter(n => !isNaN(n));
@@ -430,7 +430,6 @@ export default function App() {
     }
 
     const nextSeq = lastSeq + 1;
-    // Update the sequence immediately
     localStorage.setItem('barpos_last_seq', nextSeq.toString());
     const newId = `${idPrefix}${String(nextSeq).padStart(4, '0')}`;
     
@@ -716,7 +715,7 @@ export default function App() {
                         </div>
 
                         <div className="mt-1 pt-1 border-t border-slate-200">
-                          Lade Kas: <span className="font-bold text-green-600">€{viewingSession.endCash?.toFixed(2) || '0.00'}</span>
+                          Kas: <span className="font-bold text-green-600">€{viewingSession.endCash?.toFixed(2) || '0.00'}</span>
                         </div>
                      </div>
                  </div>
