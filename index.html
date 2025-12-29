@@ -1,59 +1,60 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BarPOS 58</title>
+    <title>BarPOS Cloud</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Space+Mono&display=swap');
       
       body {
         font-family: 'Inter', sans-serif;
+        background-color: #f1f5f9;
+        -webkit-tap-highlight-color: transparent;
       }
+
+      /* Custom Professional Scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
       /* Print Styles for 58mm Paper */
       @media print {
-        @page {
-          margin: 0;
-          size: 58mm auto; 
-        }
-        body * {
-          visibility: hidden;
-        }
-        #receipt-print-area, #receipt-print-area * {
-          visibility: visible;
-        }
+        @page { margin: 0; size: 58mm auto; }
+        body * { visibility: hidden; }
+        #receipt-print-area, #receipt-print-area * { visibility: visible; }
         #receipt-print-area {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 58mm;
-          padding: 2mm;
-          background: white;
-          color: black;
-          font-family: 'Space Mono', monospace;
-          font-size: 12px;
+          position: absolute; left: 0; top: 0; width: 58mm;
+          padding: 2mm; background: white; color: black;
+          font-family: 'Space Mono', monospace; font-size: 12px;
           line-height: 1.2;
         }
-        .no-print {
-          display: none !important;
-        }
+        .no-print { display: none !important; }
       }
 
-      /* Animation Utilities */
+      /* Enhanced Animations */
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       @keyframes zoomIn95 { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-      @keyframes zoomIn50 { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
       @keyframes slideUp { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-10px); }
+        40% { transform: translateX(10px); }
+        60% { transform: translateX(-10px); }
+        80% { transform: translateX(10px); }
+      }
 
       .animate-in { animation-fill-mode: both; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
       .fade-in { animation-name: fadeIn; }
       .zoom-in-95 { animation-name: zoomIn95; }
-      .zoom-in-50 { animation-name: zoomIn50; }
       .slide-in-from-bottom-4 { animation-name: slideUp; }
-      .duration-200 { animation-duration: 200ms; }
+      .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+      
       .duration-300 { animation-duration: 300ms; }
+      .duration-500 { animation-duration: 500ms; }
     </style>
   <script type="importmap">
 {
@@ -70,7 +71,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-100 text-slate-900">
+  <body>
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

@@ -1,0 +1,13 @@
+
+{
+  "name": "DE GEZELLIGE BAR",
+  "address": "Grote Markt 1",
+  "address2": "1000 Brussel",
+  "vatNumber": "BTW BE0123.456.789",
+  "website": "www.degezelligebar.be",
+  "sellerName": "Jan",
+  "salesmen": ["Jan", "Piet"],
+  "footerMessage": "Bedankt en tot ziens!",
+  "masterPassword": "1984",
+  "updatedAt": 1715424000000
+}

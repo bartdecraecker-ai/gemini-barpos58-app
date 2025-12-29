@@ -10,7 +10,8 @@ export interface Product {
   price: number;
   vatRate: 0 | 21;
   color?: string;
-  stock?: number; // Quantity available
+  stock?: number;
+  updatedAt: number;
 }
 
 export interface CartItem extends Product {
@@ -19,46 +20,52 @@ export interface CartItem extends Product {
 
 export interface Transaction {
   id: string;
-  sessionId: string; // Link to specific sales period
+  sessionId: string;
   timestamp: number;
-  dateStr: string; // DD/MM/YYYY
+  dateStr: string;
   items: CartItem[];
   subtotal: number;
   vat0: number;
   vat21: number;
   total: number;
   paymentMethod: PaymentMethod;
+  updatedAt: number;
 }
 
 export interface CashEntry {
   id: string;
-  sessionId: string; // Link to specific sales period
+  sessionId: string;
   timestamp: number;
   type: 'IN' | 'OUT';
   amount: number;
   reason: string;
+  updatedAt: number;
 }
 
 export interface SalesSession {
   id: string;
   startTime: number;
   endTime?: number;
-  startCash: number; // Opening float
-  endCash?: number; // Actual counted cash at close
-  expectedCash?: number; // Calculated cash at close
+  startCash: number;
+  endCash?: number;
+  expectedCash?: number;
   status: 'OPEN' | 'CLOSED';
-  summary?: DailySummary; // Snapshot of totals when closed
+  summary?: DailySummary;
+  updatedAt: number;
 }
 
 export interface CompanyDetails {
   name: string;
   address: string;
-  address2?: string; // Second line of address
+  address2?: string;
   vatNumber: string;
   website?: string;
-  sellerName?: string; // Currently active seller
-  salesmen?: string[]; // List of available sellers
+  sellerName?: string;
+  salesmen?: string[];
   footerMessage: string;
+  managerPin?: string;
+  masterPassword?: string; // Password to enter the app
+  updatedAt: number;
 }
 
 export interface DailySummary {
