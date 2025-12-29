@@ -24,6 +24,7 @@ const OPTIONAL_SERVICES = [
 
 const CHUNK_SIZE = 20;
 const CHUNK_DELAY_MS = 50;
+const LINE_WIDTH = 32; // Standard for 58mm printers
 
 export class BluetoothPrinterService {
   private device: any | null = null;
@@ -130,9 +131,15 @@ export class BluetoothPrinterService {
 
   private textEncoder = new TextEncoder();
 
+  // Helper to create a single line with left and right aligned text
+  private formatLine(left: string, right: string): string {
+    const spacesNeeded = Math.max(1, LINE_WIDTH - left.length - right.length);
+    return left + ' '.repeat(spacesNeeded) + right + '\n';
+  }
+
   async printReceipt(transaction: Transaction, company: CompanyDetails) {
     const cmds: (string | Uint8Array)[] = [
-      INIT, CENTER, BOLD_ON, company.name + '\n', BOLD_OFF,
+      INIT, '\n', CENTER, BOLD_ON, company.name + '\n', BOLD_OFF,
       company.address + '\n', 
       company.address2 ? company.address2 + '\n' : '',
       `BTW: ${company.vatNumber}\n`,
@@ -144,36 +151,43 @@ export class BluetoothPrinterService {
     ];
 
     transaction.items.forEach(item => {
-      const priceStr = (item.price * item.quantity).toFixed(2).replace('.', ',');
-      const nameStr = `${item.quantity}x ${item.name}`;
-      const spaces = Math.max(1, 32 - nameStr.length - priceStr.length);
-      cmds.push(`${nameStr}${' '.repeat(spaces)}${priceStr}\n`);
+      const lineTotal = (item.price * item.quantity).toFixed(2).replace('.', ',');
+      const itemDescription = `${item.quantity}x ${item.name}`;
+      const unitPriceStr = `(${item.price.toFixed(2).replace('.', ',')} / st)`;
+      
+      cmds.push(this.formatLine(itemDescription, lineTotal));
+      cmds.push(LEFT, `  ${unitPriceStr}\n`);
     });
 
     cmds.push('--------------------------------\n');
     const totalLabel = "TOTAAL:";
     const totalValue = `EUR ${transaction.total.toFixed(2).replace('.', ',')}`;
-    const spacesNeeded = Math.max(1, 32 - totalLabel.length - totalValue.length);
-    cmds.push(BOLD_ON, `${totalLabel}${' '.repeat(spacesNeeded)}${totalValue}`, BOLD_OFF, '\n');
+    cmds.push(BOLD_ON, this.formatLine(totalLabel, totalValue), BOLD_OFF);
     cmds.push(`Betaald via: ${transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART'}\n`);
     cmds.push('--------------------------------\n');
     
     if (transaction.vat21 > 0) {
-      const basis21 = (transaction.subtotal - transaction.vat0).toFixed(2).replace('.', ',');
-      cmds.push(`BTW 21% (basis EUR ${basis21}): ${transaction.vat21.toFixed(2).replace('.', ',')}\n`);
+      const vatLabel = "BTW 21%";
+      const vatValue = transaction.vat21.toFixed(2).replace('.', ',');
+      cmds.push(this.formatLine(vatLabel, vatValue));
     }
 
-    cmds.push(CENTER, '\n', company.footerMessage, '\n\n\n', CUT);
+    cmds.push(CENTER, '\n', company.footerMessage, '\n\n', '\n', CUT);
     await this.send(this.combineCommands(cmds));
   }
 
   async printSessionReport(session: SalesSession, transactions: Transaction[], company: CompanyDetails) {
     const sortedTx = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
-    const productBreakdown: Record<string, number> = {};
+    const productBreakdown: Record<string, { name: string, price: number, qty: number }> = {};
     let totalItems = 0;
+    
     sortedTx.forEach(tx => {
       tx.items.forEach(item => {
-        productBreakdown[item.name] = (productBreakdown[item.name] || 0) + item.quantity;
+        const key = `${item.name}_${item.price}`;
+        if (!productBreakdown[key]) {
+          productBreakdown[key] = { name: item.name, price: item.price, qty: 0 };
+        }
+        productBreakdown[key].qty += item.quantity;
         totalItems += item.quantity;
       });
     });
@@ -182,45 +196,59 @@ export class BluetoothPrinterService {
     const firstId = sortedTx.length > 0 ? sortedTx[0].id : (summary?.firstTicketId || 'N/A');
     const lastId = sortedTx.length > 0 ? sortedTx[sortedTx.length - 1].id : (summary?.lastTicketId || 'N/A');
 
+    const formatCurrency = (val: number = 0) => `EUR ${val.toFixed(2).replace('.', ',')}`;
+
     const cmds: (string | Uint8Array)[] = [
-      INIT, CENTER, BOLD_ON, "SESSIE RAPPORT\n", BOLD_OFF,
+      INIT, '\n', CENTER, BOLD_ON, "SESSIE RAPPORT\n", BOLD_OFF,
       company.name + '\n',
       '--------------------------------\n', LEFT,
-      `Sessie ID: ${session.id}\n`,
-      `Tickets: ${firstId} -> ${lastId}\n`,
-      `Start: ${new Date(session.startTime).toLocaleString('nl-NL')}\n`,
-      session.endTime ? `Einde: ${new Date(session.endTime).toLocaleString('nl-NL')}\n` : 'Sessie nog actief\n',
+      `Sessie ID: ${session.id.substring(0, 16)}\n`,
+      `Tickets: ${firstId.slice(-4)} -> ${lastId.slice(-4)}\n`,
+      `Datum: ${new Date(session.startTime).toLocaleDateString('nl-NL')}\n`,
+      `Start: ${new Date(session.startTime).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}\n`,
+      session.endTime ? `Einde: ${new Date(session.endTime).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}\n` : 'Sessie nog actief\n',
       '--------------------------------\n',
       BOLD_ON, "FINANCIEEL:\n", BOLD_OFF,
-      `Omzet: ${' '.repeat(Math.max(1, 20 - (session.summary?.totalSales || 0).toFixed(2).length))}EUR ${(session.summary?.totalSales || 0).toFixed(2).replace('.', ',')}\n`,
-      `Kaart: ${' '.repeat(Math.max(1, 20 - (session.summary?.cardTotal || 0).toFixed(2).length))}EUR ${(session.summary?.cardTotal || 0).toFixed(2).replace('.', ',')}\n`,
-      `Cash:  ${' '.repeat(Math.max(1, 20 - (session.summary?.cashTotal || 0).toFixed(2).length))}EUR ${(session.summary?.cashTotal || 0).toFixed(2).replace('.', ',')}\n`,
+      this.formatLine("Omzet:", formatCurrency(summary?.totalSales)),
+      this.formatLine("Kaart:", formatCurrency(summary?.cardTotal)),
+      this.formatLine("Cash:", formatCurrency(summary?.cashTotal)),
+      '--------------------------------\n',
+      BOLD_ON, "KAS OVERZICHT:\n", BOLD_OFF,
+      this.formatLine("Startgeld:", formatCurrency(session.startCash)),
+      this.formatLine("Kas Geteld:", formatCurrency(session.endCash)),
+      this.formatLine("Kas Verschil:", formatCurrency((session.endCash || 0) - (session.expectedCash || 0))),
       '--------------------------------\n',
       BOLD_ON, "BTW OVERZICHT:\n", BOLD_OFF,
-      `BTW 0% Basis:  ${' '.repeat(Math.max(1, 15 - (session.summary?.vat0Total || 0).toFixed(2).length))}EUR ${(session.summary?.vat0Total || 0).toFixed(2).replace('.', ',')}\n`,
-      `BTW 21% Basis: ${' '.repeat(Math.max(1, 15 - ((session.summary?.totalSales || 0) - (session.summary?.vat21Total || 0) - (session.summary?.vat0Total || 0)).toFixed(2).length))}EUR ${((session.summary?.totalSales || 0) - (session.summary?.vat21Total || 0) - (session.summary?.vat0Total || 0)).toFixed(2).replace('.', ',')}\n`,
-      `BTW 21% Totaal: ${' '.repeat(Math.max(1, 14 - (session.summary?.vat21Total || 0).toFixed(2).length))}EUR ${(session.summary?.vat21Total || 0).toFixed(2).replace('.', ',')}\n`,
+      this.formatLine("BTW 0% Basis:", formatCurrency(summary?.vat0Total)),
+      this.formatLine("BTW 21% Basis:", formatCurrency((summary?.totalSales || 0) - (summary?.vat21Total || 0) - (summary?.vat0Total || 0))),
+      this.formatLine("BTW 21% Totaal:", formatCurrency(summary?.vat21Total)),
       '--------------------------------\n',
       BOLD_ON, "PRODUCT VERKOOP:\n", BOLD_OFF
     ];
 
-    Object.entries(productBreakdown).forEach(([name, qty]) => {
-      const qtyStr = `${qty}x`;
-      const spaces = Math.max(1, 32 - name.length - qtyStr.length);
-      cmds.push(`${name}${' '.repeat(spaces)}${qtyStr}\n`);
+    const items = Object.values(productBreakdown).sort((a, b) => {
+       if (a.name !== b.name) return a.name.localeCompare(b.name);
+       return b.price - a.price;
+    });
+
+    items.forEach(item => {
+      const priceSuffix = item.price < 0 ? " (Ret)" : "";
+      const label = `${item.name}${priceSuffix}`.substring(0, 20);
+      const qtyStr = `${item.qty}x`;
+      cmds.push(this.formatLine(label, qtyStr));
     });
 
     cmds.push('--------------------------------\n');
-    cmds.push(`TOTAAL ARTIKELEN:${' '.repeat(Math.max(1, 15 - totalItems.toString().length))}${totalItems}\n`);
-    cmds.push('\n', CENTER, "*** EINDE RAPPORT ***\n\n\n", CUT);
+    cmds.push(this.formatLine("TOTAAL ARTIKELEN:", totalItems.toString()));
+    cmds.push('\n', CENTER, "*** EINDE RAPPORT ***\n\n", '\n', CUT);
     await this.send(this.combineCommands(cmds));
   }
 
   async testPrint() {
     const cmds = [
-      INIT, CENTER, BOLD_ON, "BAR POS TEST\n", BOLD_OFF,
+      INIT, '\n', CENTER, BOLD_ON, "BAR POS TEST\n", BOLD_OFF,
       "Status: Verbonden\n", new Date().toLocaleString('nl-NL') + "\n\n",
-      "Ready to serve!\n\n\n", CUT
+      "Ready to serve!\n\n", '\n', CUT
     ];
     await this.send(this.combineCommands(cmds));
   }
