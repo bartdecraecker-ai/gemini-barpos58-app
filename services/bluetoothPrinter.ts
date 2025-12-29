@@ -1,5 +1,5 @@
 
-import { Transaction, CompanyDetails } from "../types";
+import { Transaction, CompanyDetails, SalesSession } from "../types";
 
 // Standard ESC/POS Commands
 const ESC = '\x1B';
@@ -22,7 +22,6 @@ const OPTIONAL_SERVICES = [
   '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile
 ];
 
-const MAX_RETRIES = 3;
 const CHUNK_SIZE = 20;
 const CHUNK_DELAY_MS = 50;
 
@@ -32,94 +31,60 @@ export class BluetoothPrinterService {
   private isBusy = false;
 
   isSupported(): boolean {
-    const supported = !!(navigator && (navigator as any).bluetooth);
-    console.log('Bluetooth: Support check:', supported);
-    return supported;
+    return !!(navigator && (navigator as any).bluetooth);
   }
 
   async connect(): Promise<boolean> {
     try {
-      console.log('Bluetooth: Starting connection process...');
-      
       if (!this.isSupported()) {
-        throw new Error("Web Bluetooth wordt niet ondersteund door deze browser. Gebruik Chrome, Edge of Opera op een ondersteund apparaat.");
+        throw new Error("Web Bluetooth wordt niet ondersteund.");
       }
-
-      console.log('Bluetooth: Requesting device...');
       this.device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: OPTIONAL_SERVICES
       });
-
-      if (!this.device) {
-        console.log('Bluetooth: No device selected by user.');
-        return false;
-      }
-
-      console.log('Bluetooth: Device selected:', this.device.name);
+      if (!this.device) return false;
       return await this.establishConnection();
     } catch (error: any) {
-      console.error('Bluetooth Connect Error:', error);
       this.cleanup();
-      
-      if (error.name === 'SecurityError') {
-        throw new Error("Toegang tot Bluetooth is geblokkeerd door de browserinstellingen of dit venster heeft geen toestemming.");
-      } else if (error.name === 'NotFoundError') {
-        return false;
-      }
-      
+      if (error.name === 'NotFoundError') return false;
       throw error;
     }
   }
 
   private async establishConnection(): Promise<boolean> {
     if (!this.device || !this.device.gatt) return false;
-
-    console.log(`Bluetooth: Connecting to GATT server on ${this.device.name}...`);
     const server = await this.device.gatt.connect();
-    console.log('Bluetooth: GATT server connected.');
-
-    console.log('Bluetooth: Discovering primary services...');
     const services = await server.getPrimaryServices();
-    console.log(`Bluetooth: Found ${services.length} services.`);
     
     for (const service of services) {
-      console.log(`Bluetooth: Inspecting service: ${service.uuid}`);
       try {
         const characteristics = await service.getCharacteristics();
         const found = characteristics.find((c: any) => 
           c.properties.write || c.properties.writeWithoutResponse
         );
         if (found) {
-          console.log(`Bluetooth: Found writable characteristic: ${found.uuid} in service ${service.uuid}`);
           this.characteristic = found;
           break;
         }
-      } catch (e) {
-        console.warn(`Bluetooth: Could not access characteristics for service ${service.uuid}`, e);
-      }
+      } catch (e) {}
     }
 
     if (!this.characteristic) {
-      throw new Error("Geen schrijfbaar kanaal gevonden op deze printer. Zorg dat de printer ESC/POS ondersteunt via Bluetooth.");
+      throw new Error("Geen schrijfbaar kanaal gevonden.");
     }
 
     this.device.addEventListener('gattserverdisconnected', this.onDisconnected);
-    console.log('Bluetooth: Connection fully established.');
     return true;
   }
 
   private async ensureConnected(): Promise<boolean> {
     if (this.isConnected()) return true;
-    if (this.device) {
-      console.log('Bluetooth: Attempting auto-reconnect...');
-      return await this.establishConnection();
-    }
+    if (this.device) return await this.establishConnection();
     return false;
   }
 
   disconnect() {
-    console.log('Bluetooth: Manually disconnecting...');
     if (this.device && this.device.gatt?.connected) {
       this.device.gatt.disconnect();
     }
@@ -133,7 +98,6 @@ export class BluetoothPrinterService {
   }
 
   private onDisconnected = () => {
-    console.log('Bluetooth: Device disconnected.');
     this.characteristic = null;
   };
 
@@ -146,39 +110,19 @@ export class BluetoothPrinterService {
   }
 
   private async send(data: Uint8Array) {
-    if (this.isBusy) throw new Error("Printer is bezig met een andere taak...");
+    if (this.isBusy) throw new Error("Printer is bezig...");
     this.isBusy = true;
-
     try {
-      if (!(await this.ensureConnected())) {
-        throw new Error("Niet verbonden met de printer.");
-      }
-
-      console.log(`Bluetooth: Sending ${data.length} bytes in chunks of ${CHUNK_SIZE}...`);
+      if (!(await this.ensureConnected())) throw new Error("Niet verbonden.");
       for (let i = 0; i < data.length; i += CHUNK_SIZE) {
         const chunk = data.slice(i, i + CHUNK_SIZE);
-        let success = false;
-        let attempts = 0;
-
-        while (!success && attempts < MAX_RETRIES) {
-          try {
-            if (this.characteristic!.properties.writeWithoutResponse) {
-              await this.characteristic!.writeValueWithoutResponse(chunk);
-            } else {
-              await this.characteristic!.writeValue(chunk);
-            }
-            success = true;
-          } catch (e) {
-            attempts++;
-            console.warn(`Bluetooth: Chunk write failed (attempt ${attempts}/${MAX_RETRIES})`, e);
-            if (attempts >= MAX_RETRIES) throw e;
-            await new Promise(r => setTimeout(r, 100));
-            await this.ensureConnected();
-          }
+        if (this.characteristic!.properties.writeWithoutResponse) {
+          await this.characteristic!.writeValueWithoutResponse(chunk);
+        } else {
+          await this.characteristic!.writeValue(chunk);
         }
         await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
       }
-      console.log('Bluetooth: Print data sent successfully.');
     } finally {
       this.isBusy = false;
     }
@@ -196,7 +140,6 @@ export class BluetoothPrinterService {
       '--------------------------------\n', LEFT,
       `${transaction.dateStr} ${new Date(transaction.timestamp).toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'})}\n`,
       `Ticket #: ${transaction.id}\n`,
-      company.sellerName ? `Verkoper: ${company.sellerName}\n` : '',
       '--------------------------------\n'
     ];
 
@@ -208,22 +151,68 @@ export class BluetoothPrinterService {
     });
 
     cmds.push('--------------------------------\n');
-    
-    // Total line formatting: TOTAAL: EUR 122,70
     const totalLabel = "TOTAAL:";
     const totalValue = `EUR ${transaction.total.toFixed(2).replace('.', ',')}`;
     const spacesNeeded = Math.max(1, 32 - totalLabel.length - totalValue.length);
     cmds.push(BOLD_ON, `${totalLabel}${' '.repeat(spacesNeeded)}${totalValue}`, BOLD_OFF, '\n');
-    
     cmds.push(`Betaald via: ${transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART'}\n`);
     cmds.push('--------------------------------\n');
     
     if (transaction.vat21 > 0) {
       const basis21 = (transaction.subtotal - transaction.vat0).toFixed(2).replace('.', ',');
-      cmds.push(`BTW 21% (basis ${basis21}): ${transaction.vat21.toFixed(2).replace('.', ',')}\n`);
+      cmds.push(`BTW 21% (basis EUR ${basis21}): ${transaction.vat21.toFixed(2).replace('.', ',')}\n`);
     }
 
     cmds.push(CENTER, '\n', company.footerMessage, '\n\n\n', CUT);
+    await this.send(this.combineCommands(cmds));
+  }
+
+  async printSessionReport(session: SalesSession, transactions: Transaction[], company: CompanyDetails) {
+    const sortedTx = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
+    const productBreakdown: Record<string, number> = {};
+    let totalItems = 0;
+    sortedTx.forEach(tx => {
+      tx.items.forEach(item => {
+        productBreakdown[item.name] = (productBreakdown[item.name] || 0) + item.quantity;
+        totalItems += item.quantity;
+      });
+    });
+
+    const summary = session.summary;
+    const firstId = sortedTx.length > 0 ? sortedTx[0].id : (summary?.firstTicketId || 'N/A');
+    const lastId = sortedTx.length > 0 ? sortedTx[sortedTx.length - 1].id : (summary?.lastTicketId || 'N/A');
+
+    const cmds: (string | Uint8Array)[] = [
+      INIT, CENTER, BOLD_ON, "SESSIE RAPPORT\n", BOLD_OFF,
+      company.name + '\n',
+      '--------------------------------\n', LEFT,
+      `Sessie ID: ${session.id}\n`,
+      `Tickets: ${firstId} -> ${lastId}\n`,
+      `Start: ${new Date(session.startTime).toLocaleString('nl-NL')}\n`,
+      session.endTime ? `Einde: ${new Date(session.endTime).toLocaleString('nl-NL')}\n` : 'Sessie nog actief\n',
+      '--------------------------------\n',
+      BOLD_ON, "FINANCIEEL:\n", BOLD_OFF,
+      `Omzet: ${' '.repeat(Math.max(1, 20 - (session.summary?.totalSales || 0).toFixed(2).length))}EUR ${(session.summary?.totalSales || 0).toFixed(2).replace('.', ',')}\n`,
+      `Kaart: ${' '.repeat(Math.max(1, 20 - (session.summary?.cardTotal || 0).toFixed(2).length))}EUR ${(session.summary?.cardTotal || 0).toFixed(2).replace('.', ',')}\n`,
+      `Cash:  ${' '.repeat(Math.max(1, 20 - (session.summary?.cashTotal || 0).toFixed(2).length))}EUR ${(session.summary?.cashTotal || 0).toFixed(2).replace('.', ',')}\n`,
+      '--------------------------------\n',
+      BOLD_ON, "BTW OVERZICHT:\n", BOLD_OFF,
+      `BTW 0% Basis:  ${' '.repeat(Math.max(1, 15 - (session.summary?.vat0Total || 0).toFixed(2).length))}EUR ${(session.summary?.vat0Total || 0).toFixed(2).replace('.', ',')}\n`,
+      `BTW 21% Basis: ${' '.repeat(Math.max(1, 15 - ((session.summary?.totalSales || 0) - (session.summary?.vat21Total || 0) - (session.summary?.vat0Total || 0)).toFixed(2).length))}EUR ${((session.summary?.totalSales || 0) - (session.summary?.vat21Total || 0) - (session.summary?.vat0Total || 0)).toFixed(2).replace('.', ',')}\n`,
+      `BTW 21% Totaal: ${' '.repeat(Math.max(1, 14 - (session.summary?.vat21Total || 0).toFixed(2).length))}EUR ${(session.summary?.vat21Total || 0).toFixed(2).replace('.', ',')}\n`,
+      '--------------------------------\n',
+      BOLD_ON, "PRODUCT VERKOOP:\n", BOLD_OFF
+    ];
+
+    Object.entries(productBreakdown).forEach(([name, qty]) => {
+      const qtyStr = `${qty}x`;
+      const spaces = Math.max(1, 32 - name.length - qtyStr.length);
+      cmds.push(`${name}${' '.repeat(spaces)}${qtyStr}\n`);
+    });
+
+    cmds.push('--------------------------------\n');
+    cmds.push(`TOTAAL ARTIKELEN:${' '.repeat(Math.max(1, 15 - totalItems.toString().length))}${totalItems}\n`);
+    cmds.push('\n', CENTER, "*** EINDE RAPPORT ***\n\n\n", CUT);
     await this.send(this.combineCommands(cmds));
   }
 
