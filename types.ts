@@ -1,6 +1,6 @@
 export enum PaymentMethod {
   CASH = 'CASH',
-  CARD = 'CARD',
+  CARD = 'CARD'
 }
 
 export interface Product {
