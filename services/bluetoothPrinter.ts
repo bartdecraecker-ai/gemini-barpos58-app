@@ -3,12 +3,12 @@ import { Transaction, CompanyDetails, SalesSession } from '../types';
 class BluetoothPrinterService {
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private encoder = new TextEncoder();
 
-  // Zoek naar printers en verbind
   async connect(): Promise<boolean> {
     try {
       this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }], // Standaard Bluetooth Print Service
+        filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }],
         optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
       });
 
@@ -16,12 +16,14 @@ class BluetoothPrinterService {
       const service = await server?.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
       const characteristics = await service?.getCharacteristics();
       
-      // Zoek de 'write' karakteristiek
-      this.characteristic = characteristics?.[0] || null;
+      // Zoek de karakteristiek die schrijven toestaat
+      this.characteristic = characteristics?.find(c => 
+        c.properties.write || c.properties.writeWithoutResponse
+      ) || null;
       
       return !!this.characteristic;
     } catch (error) {
-      console.error("Bluetooth connectie fout:", error);
+      console.error("BT Connect Error:", error);
       return false;
     }
   }
@@ -30,75 +32,90 @@ class BluetoothPrinterService {
     return !!this.characteristic && this.device?.gatt?.connected === true;
   }
 
-  // Helper om tekst om te zetten naar bytes voor de printer
-  private encoder = new TextEncoder();
-  
-  private async printRaw(data: Uint8Array) {
+  private async send(data: string | Uint8Array) {
     if (!this.characteristic) return;
-    // Printers hebben vaak een limiet op de grootte van pakketten (MTU), we sturen in kleine stukjes
+    
+    const bytes = typeof data === 'string' ? this.encoder.encode(data) : data;
     const chunkSize = 20;
-    for (let i = 0; i < data.length; i += chunkSize) {
-      await this.characteristic.writeValue(data.slice(i, i + chunkSize));
+    
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.slice(i, i + chunkSize);
+      // Gebruik de meest betrouwbare schrijf-methode
+      if (this.characteristic.writeValueWithoutResponse) {
+        await this.characteristic.writeValueWithoutResponse(chunk);
+      } else {
+        await this.characteristic.writeValue(chunk);
+      }
+      // Cruciaal: kleine pauze voor de printer hardware
+      await new Promise(r => setTimeout(r, 15));
     }
   }
 
-  // De hoofd-print functie
   async printReceipt(transaction: Transaction | null, company: CompanyDetails, session?: SalesSession | null) {
-    if (!this.characteristic) {
-      const connected = await this.connect();
-      if (!connected) return alert("Geen printer verbonden!");
+    if (!this.isConnected()) {
+      const ok = await this.connect();
+      if (!ok) return;
     }
 
     const ESC = '\u001B';
     const GS = '\u001D';
     const LF = '\n';
 
+    // 1. Initialiseer & Clear buffer
+    await this.send(ESC + '@'); 
+    
     let p = "";
-    
-    // Initialiseer printer
-    p += ESC + '@'; 
-    // Centreer tekst
+    // Centreer Header
     p += ESC + 'a' + '\u0001'; 
-    
-    // BEDRIJFSNAAM
     p += company.name.toUpperCase() + LF;
-    p += ESC + 'a' + '\u0000'; // Links uitlijnen
+    
+    // Adres & Info
+    p += ESC + 'a' + '\u0000'; // Links
     p += company.address + LF;
     if (company.address2) p += company.address2 + LF;
     p += "BTW: " + company.vatNumber + LF;
     p += "--------------------------------" + LF;
 
     if (session) {
-      // PRINT DAGRAPPORT
+      // RAPPORT PRINT
       p += ESC + 'a' + '\u0001';
-      p += "DAGRAPPORT (Z)" + LF;
+      p += "DAGRAPPORT (Z)" + LF + LF;
       p += ESC + 'a' + '\u0000';
-      p += "Periode: " + new Date(session.startTime).toLocaleDateString() + LF;
-      p += "Omzet: EUR " + session.summary?.totalSales.toFixed(2) + LF;
-      p += "Contant: EUR " + session.summary?.cashTotal.toFixed(2) + LF;
-      p += "Kaart: EUR " + session.summary?.cardTotal.toFixed(2) + LF;
+      p += "Start: " + new Date(session.startTime).toLocaleString('nl-NL') + LF;
+      if (session.endTime) p += "Eind : " + new Date(session.endTime).toLocaleString('nl-NL') + LF;
+      p += "--------------------------------" + LF;
+      p += "OMZET TOTAAL:  EUR " + (session.summary?.totalSales || 0).toFixed(2) + LF;
+      p += "CASH:          EUR " + (session.summary?.cashTotal || 0).toFixed(2) + LF;
+      p += "KAART:         EUR " + (session.summary?.cardTotal || 0).toFixed(2) + LF;
+      p += "--------------------------------" + LF;
+      p += "BTW 21%:       EUR " + (session.summary?.vat21Total || 0).toFixed(2) + LF;
+      p += "BTW 0%:        EUR " + (session.summary?.vat0Total || 0).toFixed(2) + LF;
     } else if (transaction) {
-      // PRINT KASSABON
+      // TICKET PRINT
       p += "Ticket: " + transaction.id + LF;
-      p += "Datum: " + transaction.dateStr + LF;
+      p += "Datum:  " + transaction.dateStr + LF;
+      p += "Verkoper: " + company.sellerName + LF;
       p += "--------------------------------" + LF;
       
       transaction.items.forEach(item => {
-        p += `${item.quantity}x ${item.name.padEnd(20)}` + LF;
-        p += `   at €${item.price.toFixed(2)} -> €${(item.price * item.quantity).toFixed(2)}` + LF;
+        p += `${item.quantity}x ${item.name}` + LF;
+        p += `      €${item.price.toFixed(2)} p/s -> €${(item.price * item.quantity).toFixed(2)}` + LF;
       });
 
       p += "--------------------------------" + LF;
+      p += ESC + '!' + '\u0010'; // Dubbele hoogte voor totaal
       p += "TOTAAL: EUR " + transaction.total.toFixed(2) + LF;
-      p += "Betaalmethode: " + (transaction.paymentMethod === 'CASH' ? 'Contant' : 'Kaart') + LF;
+      p += ESC + '!' + '\u0000'; // Normaal
+      p += "Betaald via: " + (transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART') + LF;
     }
 
     p += LF + company.footerMessage + LF;
-    p += LF + LF + LF + LF; // Ruimte voor afscheuren
-    p += GS + 'V' + '\u0042' + '\u0000'; // Snij commando (indien ondersteund)
+    p += LF + LF + LF + LF; // Extra witruimte voor scheuren
+    
+    // Papier snijden (indien ondersteund)
+    p += GS + 'V' + '\u0042' + '\u0000';
 
-    const bytes = this.encoder.encode(p);
-    await this.printRaw(bytes);
+    await this.send(p);
   }
 }
 
