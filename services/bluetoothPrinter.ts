@@ -5,9 +5,16 @@ class BluetoothPrinterService {
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private encoder = new TextEncoder();
 
-  // 1. Verbinden met de printer
+  // Controleert of de verbinding met de printer nog actief is
+  isConnected(): boolean {
+    return !!(this.device?.gatt?.connected && this.characteristic);
+  }
+
+  // Maakt verbinding met de printer (Triggert de Chrome popup indien nodig)
   async connect(): Promise<boolean> {
     try {
+      if (this.isConnected()) return true;
+
       this.device = await navigator.bluetooth.requestDevice({
         filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }],
         optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
@@ -17,24 +24,19 @@ class BluetoothPrinterService {
       const service = await server?.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
       const characteristics = await service?.getCharacteristics();
       
-      // Zoek de juiste schrijf-poort
       this.characteristic = characteristics?.find(c => 
         c.properties.write || c.properties.writeWithoutResponse
       ) || null;
       
       return !!this.characteristic;
     } catch (error) {
-      console.error("Bluetooth verbinding mislukt:", error);
+      console.error("Bluetooth verbindingsfout:", error);
       return false;
     }
   }
 
-  isConnected(): boolean {
-    return !!this.characteristic && this.device?.gatt?.connected === true;
-  }
-
-  // 2. Data verzenden in kleine stukjes (chunks) voor Android stabiliteit
-  private async send(data: string) {
+  // Verzendt data in kleine stukjes naar de printer voor stabiliteit op Android
+  private async sendRaw(data: string) {
     if (!this.characteristic) return;
     
     const bytes = this.encoder.encode(data);
@@ -47,24 +49,22 @@ class BluetoothPrinterService {
       } else {
         await this.characteristic.writeValue(chunk);
       }
-      // Wacht 15ms zodat de printer de data kan verwerken
       await new Promise(r => setTimeout(r, 15));
     }
   }
 
-  // 3. De hoofdprint functie
   async printReceipt(
     transaction: Transaction | null, 
     company: CompanyDetails, 
     session?: SalesSession | null, 
-    allTransactions?: Transaction[]
+    allTransactions: Transaction[] = []
   ) {
+    // Probeer te verbinden als dat nog niet zo is
     if (!this.isConnected()) {
       const ok = await this.connect();
-      if (!ok) return;
+      if (!ok) return; 
     }
 
-    // Printer Commando's (ESC/POS)
     const ESC = '\u001B';
     const GS = '\u001D';
     const LF = '\n';
@@ -75,8 +75,7 @@ class BluetoothPrinterService {
     const FONT_LARGE = ESC + '!' + '\u0010'; 
     const FONT_NORMAL = ESC + '!' + '\u0000';
 
-    // Initialiseer printer
-    await this.send(ESC + '@'); 
+    await this.sendRaw(ESC + '@'); // Reset printer
 
     let p = "";
     
@@ -88,26 +87,29 @@ class BluetoothPrinterService {
     if (company.sellerName) p += "Verkoper: " + company.sellerName + LF;
     p += "--------------------------------" + LF;
 
-    if (session && allTransactions) {
-      // --- MODUS: DAGRAPPORT ---
+    if (session) {
+      // --- DAGRAPPORT MODUS ---
       p += BOLD_ON + "DAGRAPPORT (Z)" + BOLD_OFF + LF;
       p += LEFT + "Datum: " + new Date(session.startTime).toLocaleDateString('nl-NL') + LF;
-      p += "Sessie ID: " + session.id.slice(-6) + LF;
       p += "--------------------------------" + LF;
       
-      // Producten optellen
       p += BOLD_ON + "VERKOCHTE PRODUCTEN:" + BOLD_OFF + LF;
+      
+      // Bereken totalen per product (geforceerd in HOOFDLETTERS)
       const productSummary: Record<string, number> = {};
       const sessionTx = allTransactions.filter(t => t.sessionId === session.id);
       
       sessionTx.forEach(tx => {
         tx.items.forEach(item => {
-          productSummary[item.name] = (productSummary[item.name] || 0) + item.quantity;
+          const nameUpper = item.name.toUpperCase();
+          productSummary[nameUpper] = (productSummary[nameUpper] || 0) + item.quantity;
         });
       });
       
+      // Print elke productlijn netjes (bijv: "05 x BIER")
       Object.entries(productSummary).forEach(([name, qty]) => {
-        p += `${qty.toString().padStart(2, '0')} x ${name.slice(0, 25)}` + LF;
+        const qtyStr = qty.toString().padStart(2, '0');
+        p += `${qtyStr} x ${name.slice(0, 25)}` + LF;
       });
 
       p += "--------------------------------" + LF;
@@ -119,22 +121,23 @@ class BluetoothPrinterService {
       p += "BTW 0%:        EUR " + (session.summary?.vat0Total || 0).toFixed(2).padStart(8) + LF;
 
     } else if (transaction) {
-      // --- MODUS: KASSABON ---
+      // --- KASSABON MODUS ---
       p += LEFT + "Datum: " + transaction.dateStr + LF;
+      p += "Tijd:  " + new Date(transaction.timestamp).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'}) + LF;
       p += "Ticket: " + transaction.id.slice(-8) + LF;
       p += "--------------------------------" + LF;
 
       transaction.items.forEach(item => {
-        // Naam vetgedrukt op eigen regel (voorkomt overlap)
+        // Productnaam in HOOFDLETTERS op eigen regel
         p += BOLD_ON + item.name.toUpperCase() + BOLD_OFF + LF;
-        // Details op de regel eronder: Aantal x Prijs aan de linkerkant, Totaal aan de rechterkant
+        // Details op regel eronder (geen overlap mogelijk)
         const qtyPrice = `  ${item.quantity} x ${item.price.toFixed(2)}`;
         const lineTotal = (item.price * item.quantity).toFixed(2);
         p += qtyPrice.padEnd(22) + lineTotal.padStart(8) + LF;
       });
 
       p += "--------------------------------" + LF;
-      // Groot totaalbedrag
+      // Dubbele hoogte voor Totaalbedrag
       p += FONT_LARGE + BOLD_ON + "TOTAAL".padEnd(12) + "EUR " + transaction.total.toFixed(2).padStart(7) + BOLD_OFF + FONT_NORMAL + LF;
       p += LF + "Betaalwijze: " + (transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART') + LF;
       
@@ -150,11 +153,11 @@ class BluetoothPrinterService {
     }
 
     // --- FOOTER ---
-    p += LF + CENTER + company.footerMessage + LF;
-    p += LF + LF + LF + LF + LF; // Ruimte om af te scheuren
-    p += GS + 'V' + '\u0042' + '\u0000'; // Papier snijden
+    p += LF + CENTER + (company.footerMessage || "Bedankt voor uw bezoek!") + LF;
+    p += LF + LF + LF + LF + LF; 
+    p += GS + 'V' + '\u0042' + '\u0000'; // Cut papier
 
-    await this.send(p);
+    await this.sendRaw(p);
   }
 }
 
