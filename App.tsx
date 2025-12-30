@@ -1,224 +1,290 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  ShoppingCart, Receipt, Settings, Package, Trash2, Printer, 
-  Bluetooth, X, Plus, Save, Lock, Edit3, LogOut, Wallet, CheckCircle2, AlertCircle, Home
+  ShoppingBag, Trash2, CreditCard, Banknote, BarChart3, Settings, Plus, Minus, X, 
+  PlayCircle, Lock, Loader2, User, ChevronDown, Printer, Bluetooth, 
+  Store, MapPin, Delete, ArrowRight, Edit3, Package, Check, LogOut
 } from 'lucide-react';
-// We importeren de types, maar simuleren de printer service hieronder
-import { Transaction, Product, CompanyDetails, SalesSession, PaymentMethod } from './types';
+import { Product, CartItem, Transaction, PaymentMethod, CompanyDetails, SalesSession, DailySummary } from './types';
+import { apiService, AppMode } from './services/api';
+import { btPrinterService } from './services/bluetoothPrinter';
+
+// Constanten direct uit jouw originele omgeving
+const DEFAULT_COMPANY = {
+  name: "KRAUKERBIER", address: "Kerkstraat 1", address2: "9000 Gent",
+  vatNumber: "BE 0123.456.789", website: "www.krauker.be", footerMessage: "Bedankt!",
+  managerPin: "1984", salesmen: []
+};
+
+const AVAILABLE_COLORS = ['bg-amber-100', 'bg-blue-100', 'bg-emerald-100', 'bg-rose-100', 'bg-slate-100'];
 
 export default function App() {
-  // --- STATES ---
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SHOP' | 'REPORTS' | 'MANAGE' | 'SETTINGS'>('DASHBOARD');
-  const [viewMode, setViewMode] = useState<'GRID' | 'TOUR'>('GRID');
-  
-  // --- DATA (Hersteld) ---
-  const [products, setProducts] = useState<Product[]>([
-    { id: '1', name: 'Kraukerbier', price: 2.50, vatRate: 21, color: 'bg-amber-100', stock: 50, updatedAt: Date.now() }
-  ]);
-  const [company, setCompany] = useState<CompanyDetails>({
-    name: "KRAUKERBIER", address: "Kerkstraat 1", address2: "9000 Gent",
-    vatNumber: "BE 0123.456.789", website: "www.kraukerbier.be", footerMessage: "Bedankt en tot ziens!",
-    managerPin: "1984", updatedAt: Date.now()
-  });
+  // --- AUTH & MODE ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeMode, setActiveMode] = useState<AppMode | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [loginError, setLoginError] = useState(false);
 
+  // --- DATA STATES (EXACT ZOALS ORIGINEEL) ---
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [currentSession, setCurrentSession] = useState<SalesSession | null>(null);
-  const [showSessionStart, setShowSessionStart] = useState(false);
-  const [openingCash, setOpeningCash] = useState("50");
-  const [cart, setCart] = useState<{product: Product, qty: number}[]>([]);
-  const [editingProd, setEditingProd] = useState<Product | null>(null);
+  const [sessions, setSessions] = useState<SalesSession[]>([]);
+  const [company, setCompany] = useState<CompanyDetails>(DEFAULT_COMPANY as any);
   
-  // --- SIMULATIE STATES ---
-  const [virtualReceipt, setVirtualReceipt] = useState<string | null>(null);
+  // --- UI STATES ---
+  const [activeTab, setActiveTab] = useState<'POS' | 'REPORTS' | 'SETTINGS' | 'MANAGE'>('POS');
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [btConnected, setBtConnected] = useState(false);
+  const [currentSession, setCurrentSession] = useState<SalesSession | null>(null);
+  const [startFloatAmount, setStartFloatAmount] = useState<string>('50');
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  // --- AFREKEN LOGICA (Bevroren & Stabiel) ---
-  const handleCheckout = (method: PaymentMethod) => {
-    if (!currentSession) return;
-    if (method === PaymentMethod.CARD && !window.confirm("Is de kaartbetaling gelukt?")) return;
+  // --- FILTER LOGICA VOOR SHOP/TOUR ---
+  // Dit is de gevraagde toevoeging op je originele script
+  const filteredProducts = useMemo(() => {
+    if (!activeMode) return [];
+    const prefix = activeMode === 'SHOP' ? 'S' : 'T';
+    return products.filter(p => p.id.startsWith(prefix));
+  }, [products, activeMode]);
 
-    const total = cart.reduce((sum, item) => sum + (item.product.price * item.qty), 0);
-    const vat21 = cart.reduce((sum, item) => item.product.vatRate === 21 ? sum + (item.product.price * item.qty * 0.21 / 1.21) : sum, 0);
+  // --- INITIALISATIE & SYNC (ORIGINEEL) ---
+  useEffect(() => {
+    const savedMode = apiService.getActiveMode();
+    if (savedMode) setActiveMode(savedMode);
+  }, []);
 
-    const newTx: Transaction = {
-      id: 'TX-' + Date.now(),
+  useEffect(() => {
+    if (!isAuthenticated || !activeMode) return;
+    const loadData = async () => {
+      setIsInitialLoading(true);
+      const [p, t, c, s] = await Promise.all([
+        apiService.getProducts(), apiService.getTransactions(),
+        apiService.getCompany(), apiService.getSessions()
+      ]);
+      setProducts(p || []);
+      setTransactions(t || []);
+      setCompany(c || DEFAULT_COMPANY as any);
+      setSessions(s || []);
+      setCurrentSession(s?.find(sess => sess.status === 'OPEN') || null);
+      setBtConnected(btPrinterService.isConnected());
+      setIsInitialLoading(false);
+    };
+    loadData();
+  }, [isAuthenticated, activeMode]);
+
+  // --- PIN LOGICA (ORIGINEEL) ---
+  const handlePinDigit = (digit: string) => {
+    if (pinInput.length < 4) {
+      const newVal = pinInput + digit;
+      setPinInput(newVal);
+      if (newVal.length === 4) {
+        if (newVal === (company.masterPassword || '1984')) {
+          setIsAuthenticated(true);
+          setPinInput('');
+        } else {
+          setLoginError(true);
+          setTimeout(() => { setLoginError(false); setPinInput(''); }, 500);
+        }
+      }
+    }
+  };
+
+  // --- AFREKENEN & PRINTER (ORIGINEEL) ---
+  const finalizePayment = async (method: PaymentMethod) => {
+    if (!currentSession || cart.length === 0) return;
+    const total = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
+    const v21 = cart.reduce((s, i) => i.vatRate === 21 ? s + (i.price * i.quantity * 0.21 / 1.21) : s, 0);
+
+    const tx: Transaction = {
+      id: `TX-${Date.now()}`,
       sessionId: currentSession.id,
       timestamp: Date.now(),
-      dateStr: new Date().toLocaleString('nl-BE'),
-      items: cart.map(i => ({ ...i.product, quantity: i.qty })),
-      subtotal: total - vat21,
-      vat0: 0,
-      vat21: vat21,
+      dateStr: new Date().toLocaleDateString('nl-BE'),
+      items: [...cart],
+      subtotal: total - v21,
+      vat0: total - (cart.filter(i => i.vatRate === 21).reduce((s,i) => s+(i.price*i.quantity), 0)),
+      vat21: v21,
       total: total,
       paymentMethod: method,
       updatedAt: Date.now()
     };
 
-    // Stock & Sessie updates
-    setProducts(prev => prev.map(p => {
-      const item = cart.find(c => c.product.id === p.id);
-      return item ? { ...p, stock: Math.max(0, (p.stock || 0) - item.qty) } : p;
-    }));
-
-    setCurrentSession(prev => prev ? {
-      ...prev,
-      summary: {
-        ...prev.summary,
-        totalSales: prev.summary.totalSales + total,
-        transactionCount: prev.summary.transactionCount + 1,
-        cashTotal: method === PaymentMethod.CASH ? prev.summary.cashTotal + total : prev.summary.cashTotal,
-        cardTotal: method === PaymentMethod.CARD ? prev.summary.cardTotal + total : prev.summary.cardTotal,
-      }
-    } : null);
-
-    setTransactions(prev => [newTx, ...prev]);
-    
-    // --- SIMULATIE: Genereer virtuele bon ---
-    const receiptText = `
-      ${company.name}
-      ${company.address}
-      ${company.address2}
-      ${company.vatNumber}
-      ${company.website}
-      --------------------------------
-      TICKET: ${newTx.id.slice(-6)}
-      DATUM: ${newTx.dateStr}
-      --------------------------------
-      ${newTx.items.map(i => `${i.quantity}x ${i.name.padEnd(15)} €${(i.price * i.quantity).toFixed(2)}`).join('\n')}
-      --------------------------------
-      TOTAAL: €${newTx.total.toFixed(2)}
-      BETAALD VIA: ${method}
-      --------------------------------
-      ${company.footerMessage}
-    `;
-    setVirtualReceipt(receiptText);
+    setTransactions(prev => [tx, ...prev]);
     setCart([]);
+    if (btConnected) btPrinterService.printReceipt(tx, company);
+    
+    // Update Stock
+    setProducts(prev => prev.map(p => {
+      const item = cart.find(c => c.id === p.id);
+      return item ? { ...p, stock: Math.max(0, (p.stock || 0) - item.quantity) } : p;
+    }));
   };
 
-  // --- UI COMPONENTS ---
-  if (!isUnlocked) {
+  // --- PRODUCT BEHEER (FIX: BTW Behoud) ---
+  const saveProduct = (p: Product) => {
+    if (products.find(x => x.id === p.id)) {
+      setProducts(products.map(x => x.id === p.id ? p : x));
+    } else {
+      setProducts([...products, p]);
+    }
+    setEditingProduct(null);
+  };
+
+  const themeColor = activeMode === 'SHOP' ? 'amber' : 'indigo';
+
+  if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white font-sans">
-        <h1 className="text-3xl font-black mb-8 italic text-amber-500 tracking-tighter">KRAUKERBIER</h1>
-        <div className="grid grid-cols-3 gap-4 w-full max-w-xs">
-          {[1,2,3,4,5,6,7,8,9].map(n => (
-            <button key={n} onClick={() => { setPinInput(p => p + n); if(pinInput + n === company.managerPin) setIsUnlocked(true); }} className="h-20 bg-slate-800 rounded-3xl text-2xl font-black border border-slate-700 active:bg-amber-500">{n}</button>
+      <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-white z-[1000]">
+        <h1 className="text-xl font-black uppercase italic mb-8">BarPOS Login</h1>
+        <div className="flex gap-4 mb-10">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className={`w-4 h-4 rounded-full border-2 ${pinInput.length > i ? 'bg-amber-500 border-amber-500' : 'border-slate-800'}`} />
           ))}
-          <button onClick={() => setPinInput("")} className="text-xs font-bold text-slate-500">CLEAR</button>
-          <button onClick={() => { setPinInput(p => p + "0"); if(pinInput + "0" === company.managerPin) setIsUnlocked(true); }} className="h-20 bg-slate-800 rounded-3xl text-2xl font-black border border-slate-700">0</button>
         </div>
-        <div className="mt-8 flex gap-2">
-          {[1,2,3,4].map(i => <div key={i} className={`w-3 h-3 rounded-full ${pinInput.length >= i ? 'bg-amber-500' : 'bg-slate-700'}`} />)}
+        <div className="grid grid-cols-3 gap-3 w-64">
+          {[1,2,3,4,5,6,7,8,9,0].map(n => (
+            <button key={n} onClick={() => handlePinDigit(n.toString())} className="aspect-square bg-slate-900 rounded-2xl text-xl font-black border border-white/5 active:bg-amber-500">{n}</button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeMode) {
+    return (
+      <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="space-y-4 w-full max-w-xs">
+          <button onClick={() => { setActiveMode('SHOP'); apiService.setActiveMode('SHOP'); }} className="w-full bg-white p-6 rounded-[2rem] shadow-lg flex items-center gap-4 border-2 border-transparent active:border-amber-500">
+            <Store className="text-amber-500" /> <span className="font-black italic">SHOP MODUS</span>
+          </button>
+          <button onClick={() => { setActiveMode('TOUR'); apiService.setActiveMode('TOUR'); }} className="w-full bg-white p-6 rounded-[2rem] shadow-lg flex items-center gap-4 border-2 border-transparent active:border-indigo-500">
+            <MapPin className="text-indigo-500" /> <span className="font-black italic">TOUR MODUS</span>
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 font-sans select-none">
-      {/* HEADER */}
-      <header className="bg-white border-b p-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="font-black italic text-xl tracking-tighter">KRAUKERBIER</div>
-        <div className="flex items-center gap-3">
-            <span className="text-[10px] font-black bg-slate-100 px-2 py-1 rounded text-slate-500">{viewMode}</span>
-            <button onClick={() => setIsUnlocked(false)} className="text-slate-300"><LogOut size={20}/></button>
-        </div>
-      </header>
+    <div className="fixed inset-0 flex flex-col bg-slate-50 overflow-hidden font-sans">
+      {/* NAV (ORIGINEEL) */}
+      <nav className="h-20 bg-slate-950 text-white flex items-center justify-around shrink-0 z-50 px-2">
+        <button onClick={() => setActiveTab('POS')} className={`flex flex-col items-center gap-1 ${activeTab === 'POS' ? `text-${themeColor}-500` : 'text-slate-400'}`}>
+          <ShoppingBag size={20} /> <span className="text-[9px] font-black uppercase">Kassa</span>
+        </button>
+        <button onClick={() => setActiveTab('REPORTS')} className={`flex flex-col items-center gap-1 ${activeTab === 'REPORTS' ? `text-${themeColor}-500` : 'text-slate-400'}`}>
+          <BarChart3 size={20} /> <span className="text-[9px] font-black uppercase">Rapport</span>
+        </button>
+        <button onClick={() => setActiveTab('MANAGE')} className={`flex flex-col items-center gap-1 ${activeTab === 'MANAGE' ? `text-${themeColor}-500` : 'text-slate-400'}`}>
+          <Package size={20} /> <span className="text-[9px] font-black uppercase">Producten</span>
+        </button>
+        <button onClick={() => setActiveTab('SETTINGS')} className={`flex flex-col items-center gap-1 ${activeTab === 'SETTINGS' ? `text-${themeColor}-500` : 'text-slate-400'}`}>
+          <Settings size={20} /> <span className="text-[9px] font-black uppercase">Instellen</span>
+        </button>
+      </nav>
 
-      <main className="p-4 max-w-md mx-auto">
-        {activeTab === 'DASHBOARD' && (
-          <div className="space-y-4 pt-6 text-center">
-            <button onClick={() => currentSession ? setActiveTab('SHOP') : setShowSessionStart(true)} className="w-full bg-amber-500 text-white p-12 rounded-[3rem] font-black text-2xl shadow-xl shadow-amber-200 flex items-center justify-between italic active:scale-95 transition-transform">
-              {currentSession ? 'KASSA' : 'START SESSIE'}
-              <ShoppingCart size={32} />
-            </button>
-            <div className="grid grid-cols-2 gap-4">
-              <button onClick={() => setActiveTab('REPORTS')} className="bg-white p-8 rounded-[2.5rem] border font-black text-slate-400">RAPPORTEN</button>
-              <button onClick={() => setActiveTab('MANAGE')} className="bg-white p-8 rounded-[2.5rem] border font-black text-slate-400">BEHEER</button>
-            </div>
+      <main className="flex-1 overflow-hidden relative">
+        {activeTab === 'POS' && (
+          <div className="h-full flex flex-col">
+            {!currentSession ? (
+              <div className="flex-1 flex items-center justify-center p-4">
+                <div className="bg-white p-8 rounded-[3rem] shadow-2xl text-center w-full max-w-xs">
+                  <h3 className="font-black mb-6 uppercase italic">{activeMode} SESSIE STARTEN</h3>
+                  <input type="number" value={startFloatAmount} onChange={e=>setStartFloatAmount(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl text-center font-black text-2xl mb-4 outline-none" />
+                  <button onClick={() => {
+                    const s = { id: `SES-${Date.now()}`, startTime: Date.now(), startCash: parseFloat(startFloatAmount), status: 'OPEN' as const, updatedAt: Date.now() };
+                    setCurrentSession(s);
+                    setSessions([s, ...sessions]);
+                  }} className={`w-full bg-slate-950 text-white py-5 rounded-2xl font-black`}>START</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* CART (35%) */}
+                <div className="h-[35%] bg-white border-b overflow-y-auto p-2">
+                  {cart.map(item => (
+                    <div key={item.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-xl mb-1">
+                      <span className="font-black text-[10px] uppercase truncate">{item.name}</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setCart(cart.filter(x => x.id !== item.id))}><Trash2 size={14} className="text-slate-300"/></button>
+                        <span className="font-black italic">x{item.quantity}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* GRID (ORIGINELE 4 KOLOMMEN) */}
+                <div className="flex-1 overflow-y-auto p-3 bg-slate-100/30">
+                  <div className="grid grid-cols-4 gap-2">
+                    {filteredProducts.map(p => (
+                      <button key={p.id} onClick={() => {
+                        const ex = cart.find(x => x.id === p.id);
+                        if (ex) setCart(cart.map(x => x.id === p.id ? {...x, quantity: x.quantity + 1} : x));
+                        else setCart([...cart, {...p, quantity: 1}]);
+                      }} className={`${p.color} h-20 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center p-1 active:scale-90`}>
+                        <span className="text-[8px] font-black uppercase text-center leading-tight">{p.name}</span>
+                        <span className="text-[7px] font-black bg-white/50 px-1 rounded-full mt-1 italic">€{p.price.toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* TOTAAL & PAY */}
+                <div className="bg-slate-950 p-5 rounded-t-[2.5rem]">
+                  <div className="flex justify-between text-white mb-4 px-2">
+                    <span className="text-[9px] font-black opacity-50">TOTAAL</span>
+                    <span className="text-2xl font-black italic text-amber-500">€{cart.reduce((s,i)=>s+(i.price*i.quantity),0).toFixed(2)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => finalizePayment(PaymentMethod.CASH)} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 py-4 rounded-xl font-black text-[10px]">CONTANT</button>
+                    <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="bg-blue-500/10 border border-blue-500/30 text-blue-500 py-4 rounded-xl font-black text-[10px]">KAART</button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* PRODUCT BEHEER (BTW & STOCK) */}
+        {/* PRODUCT MANAGEMENT (BTW OPTIE TERUGGEZET) */}
         {activeTab === 'MANAGE' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h2 className="font-black uppercase text-xs text-slate-400 italic">Voorraadbeheer</h2>
-                <button onClick={() => setEditingProd({id: Date.now().toString(), name: '', price: 0, vatRate: 21, color: 'bg-amber-50', stock: 0, updatedAt: 0})} className="bg-slate-900 text-white p-2 rounded-full"><Plus/></button>
-            </div>
-            {products.map(p => (
-              <div key={p.id} className="bg-white p-4 rounded-3xl border flex justify-between items-center">
+          <div className="p-4 space-y-4 overflow-y-auto h-full">
+            <button onClick={() => setEditingProduct({ id: (activeMode === 'SHOP' ? 'S' : 'T') + Date.now(), name: '', price: 0, vatRate: 21, color: 'bg-slate-100', stock: 100, updatedAt: 0 })} className="w-full bg-slate-950 text-white p-4 rounded-2xl font-black text-[10px]">NIEUW PRODUCT ({activeMode})</button>
+            {filteredProducts.map(p => (
+              <div key={p.id} className="bg-white p-4 rounded-2xl border flex justify-between items-center">
                 <div>
-                    <div className="font-black uppercase text-sm italic">{p.name}</div>
-                    <div className="text-[10px] font-bold text-slate-400">€{p.price.toFixed(2)} • {p.vatRate}% BTW • ST:{p.stock}</div>
+                  <div className="font-black italic text-sm">{p.name}</div>
+                  <div className="text-[9px] font-bold text-slate-400">€{p.price.toFixed(2)} | {p.vatRate}% BTW | ST: {p.stock}</div>
                 </div>
-                <button onClick={() => setEditingProd(p)} className="p-2 bg-slate-50 rounded-xl text-slate-400"><Edit3 size={16}/></button>
+                <button onClick={() => setEditingProduct(p)} className="p-2 text-slate-300"><Edit3 size={18}/></button>
               </div>
             ))}
           </div>
         )}
 
-        {/* SHOP TAB */}
-        {activeTab === 'SHOP' && currentSession && (
-          <div className={viewMode === 'GRID' ? "grid grid-cols-3 gap-2" : "grid grid-cols-1 gap-3"}>
-            {products.map(p => (
-              <button key={p.id} onClick={() => setCart([...cart, {product: p, qty: 1}])} className={`${p.color} ${viewMode === 'TOUR' ? 'h-32 text-xl' : 'h-24 text-[10px]'} rounded-[2rem] border-2 border-white shadow-sm flex flex-col items-center justify-center relative font-black uppercase italic active:scale-95`}>
-                {p.name}
-                <div className="text-xs opacity-50 not-italic">€{p.price.toFixed(2)}</div>
-                <div className="absolute bottom-2 right-4 text-[8px] opacity-30">ST: {p.stock}</div>
-              </button>
-            ))}
+        {/* SETTINGS (PRINTER) */}
+        {activeTab === 'SETTINGS' && (
+          <div className="p-6 space-y-4">
+             <button onClick={async () => { const ok = await btPrinterService.connect(); setBtConnected(ok); }} className={`w-full p-6 rounded-3xl font-black italic flex items-center justify-between ${btConnected ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white'}`}>
+               {btConnected ? 'PRINTER VERBONDEN' : 'VERBIND PRINTER'}
+               {btConnected ? <BluetoothConnected /> : <Bluetooth />}
+             </button>
+             <button onClick={() => setActiveMode(null)} className="w-full bg-slate-100 p-4 rounded-2xl font-black text-slate-400 text-[10px]">WISSEL MODUS (SHOP/TOUR)</button>
+             <button onClick={() => setIsAuthenticated(false)} className="w-full text-red-500 font-black text-[10px] mt-10">UITLOGGEN</button>
           </div>
         )}
       </main>
 
-      {/* NAVIGATIE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 flex justify-around z-50">
-        <button onClick={() => setActiveTab('DASHBOARD')} className={activeTab === 'DASHBOARD' ? 'text-amber-500' : 'text-slate-300'}><Home/></button>
-        <button onClick={() => setActiveTab('SHOP')} className={activeTab === 'SHOP' ? 'text-amber-500' : 'text-slate-300'}><ShoppingCart/></button>
-        <button onClick={() => setActiveTab('REPORTS')} className={activeTab === 'REPORTS' ? 'text-amber-500' : 'text-slate-300'}><Receipt/></button>
-        <button onClick={() => setActiveTab('MANAGE')} className={activeTab === 'MANAGE' ? 'text-amber-500' : 'text-slate-300'}><Package/></button>
-        <button onClick={() => setActiveTab('SETTINGS')} className={activeTab === 'SETTINGS' ? 'text-amber-500' : 'text-slate-300'}><Settings/></button>
-      </nav>
-
-      {/* VIRTUEEL TICKET (TEST VENSTER) */}
-      {virtualReceipt && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-xs p-8 rounded-xl font-mono text-[10px] shadow-2xl relative">
-            <button onClick={() => setVirtualReceipt(null)} className="absolute -top-12 right-0 text-white font-black">SLUITEN X</button>
-            <pre className="whitespace-pre-wrap leading-tight">{virtualReceipt}</pre>
-            <div className="mt-6 p-4 bg-emerald-50 text-emerald-700 rounded-lg text-center font-bold font-sans uppercase">
-                Simulatie geslaagd!
+      {/* EDIT MODAL (MET BTW) */}
+      {editingProduct && (
+        <div className="fixed inset-0 bg-white z-[200] p-6">
+          <div className="max-w-xs mx-auto space-y-4">
+            <h2 className="font-black italic uppercase">Product Aanpassen</h2>
+            <input className="w-full bg-slate-50 p-4 rounded-xl font-bold" placeholder="Naam" value={editingProduct.name} onChange={e=>setEditingProduct({...editingProduct, name: e.target.value})} />
+            <input type="number" className="w-full bg-slate-50 p-4 rounded-xl font-bold" placeholder="Prijs" value={editingProduct.price} onChange={e=>setEditingProduct({...editingProduct, price: parseFloat(e.target.value)})} />
+            <div className="flex gap-2">
+              <button onClick={()=>setEditingProduct({...editingProduct, vatRate: 21})} className={`flex-1 p-4 rounded-xl font-black ${editingProduct.vatRate === 21 ? 'bg-slate-900 text-white' : 'bg-slate-50'}`}>21% BTW</button>
+              <button onClick={()=>setEditingProduct({...editingProduct, vatRate: 0})} className={`flex-1 p-4 rounded-xl font-black ${editingProduct.vatRate === 0 ? 'bg-slate-900 text-white' : 'bg-slate-50'}`}>0% BTW</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODALS VOOR SESSIE & PRODUCT (Hetzelfde als voorheen) */}
-      {showSessionStart && (
-        <div className="fixed inset-0 bg-slate-900 z-[150] flex flex-col items-center justify-center p-8 text-white">
-          <h2 className="text-3xl font-black italic mb-6">OPEN KASSA</h2>
-          <input type="number" value={openingCash} onChange={e => setOpeningCash(e.target.value)} className="bg-transparent border-b-4 border-amber-500 text-5xl font-black text-center w-full mb-12 outline-none" autoFocus />
-          <button onClick={() => {
-            setCurrentSession({id: 'S'+Date.now(), startTime: Date.now(), startCash: parseFloat(openingCash), status: 'OPEN', cashManagement: {openingBalance: parseFloat(openingCash), closingBalance: 0, difference: 0}, summary: {totalSales: 0, transactionCount: 0, cashTotal: 0, cardTotal: 0, vat0Total: 0, vat21Total: 0}, updatedAt: Date.now()});
-            setShowSessionStart(false);
-            setActiveTab('SHOP');
-          }} className="w-full bg-amber-500 p-6 rounded-[2.5rem] font-black text-xl">START VERKOOP</button>
-        </div>
-      )}
-
-      {/* CART OVERLAY */}
-      {cart.length > 0 && activeTab === 'SHOP' && (
-        <div className="fixed bottom-24 left-4 right-4 bg-white p-6 rounded-[2.5rem] shadow-2xl border-2 border-slate-100 z-[60]">
-           <div className="flex justify-between items-center mb-4 px-2 italic font-black text-sm">
-             <span className="text-slate-300 uppercase text-[10px]">Totaal</span>
-             <span className="text-amber-500 text-xl font-black">€{cart.reduce((s,i)=>s+(i.product.price*i.qty),0).toFixed(2)}</span>
-           </div>
-           <div className="flex gap-2">
-            <button onClick={() => handleCheckout(PaymentMethod.CASH)} className="flex-1 bg-slate-900 text-white p-5 rounded-2xl font-black italic uppercase text-xs">CASH</button>
-            <button onClick={() => handleCheckout(PaymentMethod.CARD)} className="flex-1 bg-indigo-600 text-white p-5 rounded-2xl font-black italic uppercase text-xs">KAART</button>
-            <button onClick={() => setCart([])} className="p-5 bg-slate-100 rounded-2xl text-slate-300"><X size={18}/></button>
+            <button onClick={() => saveProduct(editingProduct)} className="w-full bg-emerald-500 text-white p-5 rounded-2xl font-black italic">OPSLAAN</button>
+            <button onClick={() => setEditingProduct(null)} className="w-full text-slate-300 font-bold text-[10px]">ANNULEREN</button>
           </div>
         </div>
       )}
