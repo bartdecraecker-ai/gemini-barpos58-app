@@ -65,27 +65,53 @@ export default function App() {
 
   const handleCheckout = async (method: PaymentMethod) => {
     if (cart.length === 0) return;
+
+    // 1. BEVESTIGING KAARTBETALING (zoals gevraagd)
+    if (method === PaymentMethod.CARD) {
+      const confirmed = window.confirm("Is de kaartbetaling op de terminal geslaagd?");
+      if (!confirmed) return; 
+    }
+
     const total = cart.reduce((sum, item) => sum + (item.product.price * item.qty), 0);
     const v21 = cart.reduce((sum, item) => item.product.vatRate === 21 ? sum + (item.product.price * item.qty * 0.21 / 1.21) : sum, 0);
 
-    // Stock afboeken
+    // 2. VOORRAAD AFBOEKEN (Volgens origineel script)
     setProducts(prev => prev.map(p => {
       const item = cart.find(c => c.product.id === p.id);
       return item ? { ...p, stock: (p.stock || 0) - item.qty } : p;
     }));
 
+    // 3. TRANSACTIE MAAK & OPSLAAN
     const newTx: Transaction = {
-      id: 'TX-' + Date.now(), sessionId: currentSession.id, timestamp: Date.now(),
-      dateStr: new Date().toLocaleString('nl-NL'), items: cart.map(i => ({ ...i.product, quantity: i.qty })),
-      subtotal: total - v21, vat0: 0, vat21: v21, total: total, paymentMethod: method, updatedAt: Date.now()
+      id: 'TX-' + Date.now(),
+      sessionId: currentSession.id,
+      timestamp: Date.now(),
+      dateStr: new Date().toLocaleString('nl-NL'),
+      items: cart.map(i => ({ ...i.product, quantity: i.qty })),
+      subtotal: total - v21,
+      vat0: 0,
+      vat21: v21,
+      total: total,
+      paymentMethod: method,
+      updatedAt: Date.now()
     };
 
+    // 4. SESSIE UPDATEN (Volgens origineel script)
     setCurrentSession(prev => ({
       ...prev,
-      summary: { ...prev.summary, totalSales: prev.summary.totalSales + total, transactionCount: prev.summary.transactionCount + 1, cashTotal: method === PaymentMethod.CASH ? prev.summary.cashTotal + total : prev.summary.cashTotal, cardTotal: method === PaymentMethod.CARD ? prev.summary.cardTotal + total : prev.summary.cardTotal, vat21Total: prev.summary.vat21Total + v21 }
+      summary: { 
+        ...prev.summary, 
+        totalSales: prev.summary.totalSales + total, 
+        transactionCount: prev.summary.transactionCount + 1, 
+        cashTotal: method === PaymentMethod.CASH ? prev.summary.cashTotal + total : prev.summary.cashTotal, 
+        cardTotal: method === PaymentMethod.CARD ? prev.summary.cardTotal + total : prev.summary.cardTotal, 
+        vat21Total: prev.summary.vat21Total + v21 
+      }
     }));
 
     setTransactions([newTx, ...transactions]);
+    
+    // 5. PRINTEN & LEEGMAKEN (Directe popup voor de bon)
     setPreviewTx(newTx);
     setCart([]);
   };
