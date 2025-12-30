@@ -269,7 +269,7 @@ export default function App() {
                 <div key={s.id} className="bg-white p-4 rounded-[2rem] shadow-sm border space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="font-black text-xs uppercase">{new Date(s.endTime!).toLocaleDateString('nl-NL')}</span>
-                    <button onClick={() => btPrinterService.printReceipt(null, company, s)} className="p-2 bg-slate-50 rounded-lg text-slate-400"><Printer size={16}/></button>
+                    <button onClick={() => btPrinterService.printReceipt(null, company, s, transactions)} className="p-2 bg-slate-50 rounded-lg text-slate-400"><Printer size={16}/></button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[11px] font-bold">
                     <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">Omzet: €{s.summary?.totalSales.toFixed(2)}</div>
@@ -455,7 +455,7 @@ export default function App() {
           <div className="bg-white rounded-[2rem] w-full max-w-xs flex flex-col max-h-[90vh]">
             <div className="p-4 border-b flex justify-between items-center"><span className="font-black text-[10px] uppercase">Ticket Preview</span><button onClick={()=>setPreviewTransaction(null)}><X/></button></div>
             <div className="flex-1 overflow-y-auto p-4 bg-slate-100 flex justify-center"><Receipt transaction={previewTransaction} company={company} preview={true}/></div>
-            <div className="p-4 space-y-3"><button onClick={()=>{btPrinterService.printReceipt(previewTransaction, company); setPreviewTransaction(null);}} className="w-full bg-slate-950 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2"><Printer size={18}/> PRINT TICKET</button></div>
+            <div className="p-4 space-y-3"><button onClick={()=>{btPrinterService.printReceipt(previewTransaction, company, null, []); setPreviewTransaction(null);}} className="w-full bg-slate-950 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2"><Printer size={18}/> PRINT TICKET</button></div>
           </div>
         </div>
       )}
