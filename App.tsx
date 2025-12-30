@@ -37,13 +37,22 @@ export default function App() {
   const [previewTx, setPreviewTx] = useState<Transaction | null>(null);
 
   // Sessie State
-  const [currentSession, setCurrentSession] = useState<SalesSession | null>({
-    id: 'SESS-' + Date.now(),
-    startTime: Date.now(),
-    status: 'OPEN',
-    cashManagement: { openingBalance: 50, closingBalance: 0, difference: 0 },
-    summary: { totalSales: 0, cashTotal: 0, cardTotal: 0, vat21Total: 0, vat0Total: 0 }
-  });
+ const [currentSession, setCurrentSession] = useState<SalesSession>({
+  id: 'SESS-' + Date.now(),
+  startTime: Date.now(),
+  startCash: 50,
+  status: 'OPEN',
+  cashManagement: { openingBalance: 50, closingBalance: 0, difference: 0 },
+  summary: { 
+    totalSales: 0, 
+    transactionCount: 0, 
+    cashTotal: 0, 
+    cardTotal: 0, 
+    vat0Total: 0, 
+    vat21Total: 0 
+  },
+  updatedAt: Date.now()
+});
   const [closedSessions, setClosedSessions] = useState<SalesSession[]>([]);
 
   // --- 2. BLUETOOTH STATUS CHECK ---
