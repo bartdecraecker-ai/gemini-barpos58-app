@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Transaction, CompanyDetails, SalesSession } from '../types';
 
@@ -44,7 +43,8 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDraw
 
      return (
        <Wrapper>
-         <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">
+         {/* Bedrijfsnaam: 'uppercase' verwijderd zodat eigen huisstijl zichtbaar is */}
+         <div className="text-center font-bold mb-2 border-b border-black pb-2">
            {company.name}
          </div>
          <div className="text-center mb-2 text-xs">
@@ -67,7 +67,8 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDraw
 
   return (
     <Wrapper>
-      <div className="text-center font-bold mb-2 uppercase border-b border-black pb-2">
+      {/* Bedrijfsnaam: 'uppercase' verwijderd */}
+      <div className="text-center font-bold mb-2 border-b border-black pb-2">
         {company.name}
       </div>
       <div className="text-center mb-2 text-[10px]">
@@ -91,7 +92,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDraw
       
       <div className="border-b border-dashed border-black pb-1 mb-2 text-[10px]">
         <div className="flex justify-between">
-           <span>{transaction.dateStr} {timeStr}</span>
+            <span>{transaction.dateStr} {timeStr}</span>
         </div>
         <div className="flex justify-between font-bold">
           <span>Ticket #:</span>
@@ -103,7 +104,8 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDraw
         {transaction.items.map((item, idx) => (
           <div key={idx} className="flex justify-between text-[10px] mb-1">
             <div className="flex flex-col flex-1">
-              <span className="font-bold truncate w-32 uppercase">
+              {/* Productnaam: 'uppercase' VERWIJDERD */}
+              <span className="font-bold truncate w-32">
                 {item.quantity}x {item.name}
               </span>
               <span className="text-[9px] opacity-70">
@@ -117,15 +119,16 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDraw
 
       <div className="border-t border-black pt-2 mb-2">
         <div className="flex justify-between text-[10px] mb-1">
-           <span>Totaal excl. BTW</span>
-           <span>EUR {(transaction.subtotal).toFixed(2).replace('.', ',')}</span>
+            <span>Totaal excl. BTW</span>
+            <span>EUR {(transaction.subtotal).toFixed(2).replace('.', ',')}</span>
         </div>
         <div className="flex justify-between font-bold text-sm">
           <span>TOTAAL</span>
           <span>EUR {transaction.total.toFixed(2).replace('.', ',')}</span>
         </div>
         <div className="flex justify-between text-[10px] mt-1">
-          <span>Betaald via {transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART'}</span>
+          {/* Betaalmethode: 'CONTANT/KAART' aangepast naar normale tekst */}
+          <span>Betaald via {transaction.paymentMethod === 'CASH' ? 'Contant' : 'Kaart'}</span>
         </div>
       </div>
 
@@ -147,8 +150,9 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company, openDraw
       <div className="text-center text-[10px] mt-4 italic">
         {company.footerMessage}
       </div>
-      <div className="text-center text-[8px] opacity-50 mt-1 uppercase tracking-widest">
-        *** EINDE BON ***
+      {/* 'uppercase' bij einde bon verwijderd voor rustiger beeld */}
+      <div className="text-center text-[8px] opacity-50 mt-1 tracking-widest">
+        *** Einde bon ***
       </div>
     </Wrapper>
   );
