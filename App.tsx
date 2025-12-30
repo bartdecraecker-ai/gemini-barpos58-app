@@ -1,4 +1,4 @@
-      import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShoppingBag, Trash2, CreditCard, Banknote, BarChart3, Settings, Plus, Minus, X, 
   CheckCircle, PlayCircle, KeyRound, RefreshCcw, Archive, Loader2, Building2, 
@@ -37,7 +37,7 @@ export default function App() {
   const [endCashInput, setEndCashInput] = useState('');
   const [showSalesmanSelection, setShowSalesmanSelection] = useState(false);
 
-  // --- LOGICA ---
+  // --- INITIALISATIE & SYNC ---
   useEffect(() => {
     const savedMode = apiService.getActiveMode();
     if (savedMode) setActiveMode(savedMode);
@@ -111,10 +111,18 @@ export default function App() {
       paymentMethod: method,
       updatedAt: now
     };
+    
+    // Update stock
+    const updatedProducts = products.map(p => {
+      const cartItem = cart.find(ci => ci.id === p.id);
+      return cartItem ? { ...p, stock: (p.stock || 0) - cartItem.quantity } : p;
+    });
+    setProducts(updatedProducts);
+    
     setTransactions([tx, ...transactions]);
     setCart([]);
     setShowCardPrompt(false);
-    setPreviewTransaction(tx); // Open de preview
+    setPreviewTransaction(tx);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 1500);
   };
@@ -148,21 +156,17 @@ export default function App() {
 
   const themeColor = activeMode === 'SHOP' ? 'amber' : 'indigo';
 
-  // --- RENDER LOGIN / MODE SELECT ---
+  // --- UI RENDER (LOGIN & MODE) ---
   if (!isAuthenticated) return (
-    <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-white z-[1000]">
+    <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center z-[1000] text-white">
       <div className={`w-full max-w-xs text-center ${loginError ? 'animate-shake' : ''}`}>
-        <div className="mb-8"><Lock size={48} className="mx-auto text-amber-500" /></div>
+        <Lock size={48} className="mx-auto mb-10 text-amber-500" />
         <div className="flex justify-center gap-4 mb-10">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className={`w-4 h-4 rounded-full border-2 ${pinInput.length > i ? 'bg-amber-500 border-amber-500' : 'border-slate-800'}`} />
-          ))}
+          {[...Array(4)].map((_, i) => <div key={i} className={`w-4 h-4 rounded-full border-2 ${pinInput.length > i ? 'bg-amber-500 border-amber-500' : 'border-slate-800'}`} />)}
         </div>
         <div className="grid grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'del'].map((d) => (
-            <button key={d} onClick={() => d === 'del' ? setPinInput(pinInput.slice(0,-1)) : d === 'C' ? setPinInput('') : handlePinDigit(d.toString())} className="h-16 rounded-2xl bg-slate-900 text-xl font-black active:bg-amber-500">
-              {d === 'del' ? <Delete className="mx-auto"/> : d}
-            </button>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'del'].map(d => (
+            <button key={d} onClick={() => d === 'del' ? setPinInput(pinInput.slice(0,-1)) : d === 'C' ? setPinInput('') : handlePinDigit(d.toString())} className="h-16 rounded-2xl bg-slate-900 text-xl font-black active:bg-amber-500">{d === 'del' ? <Delete className="mx-auto"/> : d}</button>
           ))}
         </div>
       </div>
@@ -173,18 +177,17 @@ export default function App() {
     <div className="fixed inset-0 bg-slate-50 flex items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-4">
         <button onClick={() => { apiService.setActiveMode('SHOP'); setActiveMode('SHOP'); }} className="w-full bg-white p-8 rounded-[2rem] shadow-xl flex items-center gap-6 border-4 border-transparent active:border-amber-500">
-          <Store size={40} className="text-amber-500"/> <div><h2 className="font-black text-xl uppercase">SHOP MODUS</h2></div>
+          <Store size={40} className="text-amber-500"/> <h2 className="font-black text-xl">SHOP MODUS</h2>
         </button>
         <button onClick={() => { apiService.setActiveMode('TOUR'); setActiveMode('TOUR'); }} className="w-full bg-white p-8 rounded-[2rem] shadow-xl flex items-center gap-6 border-4 border-transparent active:border-indigo-500">
-          <MapPin size={40} className="text-indigo-500"/> <div><h2 className="font-black text-xl uppercase">TOUR MODUS</h2></div>
+          <MapPin size={40} className="text-indigo-500"/> <h2 className="font-black text-xl">TOUR MODUS</h2>
         </button>
       </div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-slate-50 overflow-hidden">
-      {/* NAVIGATION */}
+    <div className="fixed inset-0 flex flex-col bg-slate-50 overflow-hidden font-sans">
       <nav className="h-20 bg-slate-950 text-white flex items-center justify-around shrink-0 z-50">
         <button onClick={() => setActiveTab('POS')} className={`flex flex-col items-center gap-1 ${activeTab === 'POS' ? `text-${themeColor}-500` : 'text-slate-500'}`}><ShoppingBag size={20}/><span className="text-[9px] font-black uppercase">Kassa</span></button>
         <button onClick={() => setActiveTab('REPORTS')} className={`flex flex-col items-center gap-1 ${activeTab === 'REPORTS' ? `text-${themeColor}-500` : 'text-slate-500'}`}><BarChart3 size={20}/><span className="text-[9px] font-black uppercase">Rapport</span></button>
@@ -205,7 +208,6 @@ export default function App() {
               </div>
             ) : (
               <>
-                {/* CART */}
                 <div className="h-[35%] bg-white border-b flex flex-col shrink-0">
                   <div className="px-4 py-2 bg-slate-50 border-b flex justify-between items-center">
                     <div className="flex gap-2">
@@ -218,9 +220,9 @@ export default function App() {
                     </div>
                     <button onClick={()=>setIsClosingSession(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-full border-2 border-red-200 text-red-600 text-[9px] font-black"><LogOut size={12}/> SLUITEN</button>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                  <div className="flex-1 overflow-y-auto p-2">
                     {cart.map(item => (
-                      <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                      <div key={item.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-xl mb-1 border border-slate-100">
                         <span className="font-black text-[11px] truncate flex-1">{item.name}</span>
                         <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-full border shadow-sm">
                           <button onClick={()=>setCart(cart.map(x=>x.id===item.id?{...x, quantity:x.quantity-1}:x).filter(x=>x.quantity>0))}><Minus size={14}/></button>
@@ -231,20 +233,18 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-                {/* PRODUCTS */}
                 <div className="flex-1 overflow-y-auto p-3 bg-slate-100/50">
                   <div className="grid grid-cols-4 gap-2 pb-8">
                     {products.map(p => (
-                      <button key={p.id} onClick={() => { const ex=cart.find(i=>i.id===p.id); setCart(ex?cart.map(i=>i.id===p.id?{...i, quantity:i.quantity+1}:i):[...cart,{...p, quantity:1}]); }} className={`${p.color || 'bg-white'} h-20 rounded-2xl border border-black/5 shadow-sm active:scale-95 flex flex-col items-center justify-center p-2`}>
+                      <button key={p.id} onClick={() => { const ex=cart.find(i=>i.id===p.id); setCart(ex?cart.map(i=>i.id===p.id?{...i, quantity:i.quantity+1}:i):[...cart,{...p, quantity:1}]); }} className={`${p.color || 'bg-white'} h-20 rounded-2xl border border-black/5 shadow-sm flex flex-col items-center justify-center p-2`}>
                         <span className="text-[9px] font-black leading-tight text-center line-clamp-2">{p.name}</span>
                         <span className="text-[10px] font-black italic mt-1">€{p.price.toFixed(2)}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-                {/* FOOTER */}
                 <div className="bg-slate-950 text-white p-5 rounded-t-[2.5rem]">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb-4 px-1">
                     <span className="text-slate-500 font-black text-[10px] uppercase">Totaal</span>
                     <span className={`text-3xl font-black italic text-${themeColor}-500`}>€{totals.total.toFixed(2)}</span>
                   </div>
@@ -258,142 +258,117 @@ export default function App() {
           </div>
         )}
 
-        {/* --- SETTINGS TAB --- */}
-        {activeTab === 'SETTINGS' && (
-          <div className="p-4 h-full overflow-y-auto pb-24 space-y-8">
-            <section>
-              <h2 className="text-xl font-black uppercase italic mb-4">Bedrijfsgegevens</h2>
-              <div className="bg-white p-4 rounded-[2rem] shadow-sm space-y-3">
-                <input className="w-full border-b p-2 font-bold" value={company.name} onChange={e=>setCompany({...company, name: e.target.value})} placeholder="Bedrijfsnaam"/>
-                <input className="w-full border-b p-2 text-sm" value={company.address} onChange={e=>setCompany({...company, address: e.target.value})} placeholder="Adres regel 1"/>
-                <input className="w-full border-b p-2 text-sm" value={company.address2} onChange={e=>setCompany({...company, address2: e.target.value})} placeholder="Adres regel 2 (Stad/Postcode)"/>
-                <input className="w-full border-b p-2 text-sm" value={company.vatNumber} onChange={e=>setCompany({...company, vatNumber: e.target.value})} placeholder="BTW nummer"/>
-                <input className="w-full border-b p-2 text-sm" value={company.website} onChange={e=>setCompany({...company, website: e.target.value})} placeholder="Website"/>
-                <textarea className="w-full border-b p-2 text-sm" value={company.footerMessage} onChange={e=>setCompany({...company, footerMessage: e.target.value})} placeholder="Voettekst ticket"/>
-              </div>
-            </section>
-
-            <section>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-black uppercase italic">Producten</h2>
-                <div className="flex gap-2">
-                  <button onClick={() => { const m = activeMode === 'SHOP' ? 'TOUR' : 'SHOP'; apiService.setActiveMode(m); setActiveMode(m); }} className={`px-3 py-1 rounded-full text-[10px] font-black border-2 ${activeMode === 'SHOP' ? 'border-amber-500 text-amber-500' : 'border-indigo-500 text-indigo-500'}`}>WISSEL MODUS</button>
+        {activeTab === 'REPORTS' && (
+          <div className="p-4 h-full overflow-y-auto pb-24 space-y-4">
+            <h2 className="text-xl font-black uppercase italic mb-4">Sessie Historiek</h2>
+            {sessions.filter(s => s.status === 'CLOSED').map(s => {
+              const sessionTx = transactions.filter(t => t.sessionId === s.id);
+              const productTotals: Record<string, number> = {};
+              sessionTx.forEach(tx => tx.items.forEach(it => productTotals[it.name] = (productTotals[it.name] || 0) + it.quantity));
+              return (
+                <div key={s.id} className="bg-white p-4 rounded-[2rem] shadow-sm border space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-black text-xs uppercase">{new Date(s.endTime!).toLocaleDateString('nl-NL')}</span>
+                    <button onClick={() => btPrinterService.printReceipt(null, company, s)} className="p-2 bg-slate-50 rounded-lg text-slate-400"><Printer size={16}/></button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-bold">
+                    <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">Omzet: €{s.summary?.totalSales.toFixed(2)}</div>
+                    <div className="p-2 bg-slate-50 text-slate-700 rounded-xl text-center">Geteld: €{s.endCash?.toFixed(2)}</div>
+                  </div>
+                  <div className="text-[9px] text-slate-400 font-black border-t pt-2 uppercase">Verkochte producten:</div>
+                  <div className="space-y-1">
+                    {Object.entries(productTotals).map(([name, qty]) => (
+                      <div key={name} className="flex justify-between text-[10px] font-bold"><span>{name}</span><span>{qty}x</span></div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-3">
-                {products.map(p => (
-                  <div key={p.id} className="bg-white p-4 rounded-2xl border shadow-sm">
-                    <div className="flex gap-2 mb-3">
-                      <input className="flex-1 font-bold text-sm" value={p.name} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, name:e.target.value}:x))}/>
-                      <button onClick={()=>setProducts(products.filter(x=>x.id!==p.id))} className="text-red-400"><Trash2 size={18}/></button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input type="number" className="bg-slate-50 p-2 rounded-lg font-black text-xs" value={p.price} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, price:parseFloat(e.target.value)}:x))}/>
-                      <input type="number" className="bg-slate-50 p-2 rounded-lg font-black text-xs" value={p.stock || 0} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, stock:parseInt(e.target.value)}:x))} placeholder="Stock"/>
-                      <select className="bg-slate-50 p-2 rounded-lg font-black text-xs" value={p.vatRate} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, vatRate:parseInt(e.target.value)}:x))}>
-                        <option value={21}>21%</option>
-                        <option value={0}>0%</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
-                <button onClick={()=>setProducts([...products, {id:Date.now().toString(), name:"Nieuw Product", price:0, vatRate:21, color:'bg-white', stock:0, updatedAt:Date.now()}])} className="w-full p-4 border-2 border-dashed rounded-2xl font-bold text-slate-400 flex items-center justify-center gap-2"><Plus/> Nieuw Product</button>
-              </div>
-            </section>
+              );
+            })}
+          </div>
+        )}
 
-            <section>
-              <h2 className="text-xl font-black uppercase italic mb-4">Verkopers</h2>
-              <div className="bg-white p-4 rounded-2xl shadow-sm space-y-2">
-                {company.salesmen?.map((s, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-2 border-b">
-                    <span className="font-bold">{s}</span>
-                    <button onClick={() => setCompany({...company, salesmen: company.salesmen?.filter((_, i) => i !== idx)})} className="text-red-400"><X size={16}/></button>
-                  </div>
-                ))}
-                <button onClick={() => { const n = prompt("Naam verkoper:"); if(n) setCompany({...company, salesmen: [...(company.salesmen || []), n]}); }} className="w-full py-2 text-sm font-black text-slate-400">+ VERKOPER TOEVOEGEN</button>
+        {activeTab === 'SETTINGS' && (
+          <div className="p-4 h-full overflow-y-auto pb-24 space-y-6">
+            <section className="bg-white p-5 rounded-[2.5rem] shadow-sm space-y-3">
+              <h2 className="font-black text-xs uppercase text-slate-400">Company Data</h2>
+              <input className="w-full border-b p-1 font-bold" value={company.name} onChange={e=>setCompany({...company, name:e.target.value})} placeholder="Bedrijfsnaam"/>
+              <input className="w-full border-b p-1 text-xs" value={company.address} onChange={e=>setCompany({...company, address:e.target.value})} placeholder="Adres regel 1"/>
+              <input className="w-full border-b p-1 text-xs" value={company.address2} onChange={e=>setCompany({...company, address2:e.target.value})} placeholder="Adres regel 2"/>
+              <input className="w-full border-b p-1 text-xs" value={company.vatNumber} onChange={e=>setCompany({...company, vatNumber:e.target.value})} placeholder="BTW Nummer"/>
+            </section>
+            <section className="space-y-3">
+              <div className="flex justify-between items-center px-1">
+                <h2 className="font-black text-xs uppercase text-slate-400">Producten</h2>
+                <button onClick={() => { const m=activeMode==='SHOP'?'TOUR':'SHOP'; apiService.setActiveMode(m); setActiveMode(m); }} className="text-[10px] font-black border-2 px-3 py-1 rounded-full uppercase">Switch Modus</button>
               </div>
+              {products.map(p => (
+                <div key={p.id} className="bg-white p-4 rounded-2xl border shadow-sm space-y-3">
+                  <div className="flex gap-2">
+                    <input className="flex-1 font-bold text-sm bg-transparent" value={p.name} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, name:e.target.value}:x))}/>
+                    <button onClick={()=>setProducts(products.filter(x=>x.id!==p.id))} className="text-red-300"><Trash2 size={16}/></button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-[8px] font-black text-slate-400 uppercase">Prijs <input type="number" className="w-full bg-slate-50 p-2 rounded-lg text-[11px] mt-1" value={p.price} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, price:parseFloat(e.target.value)}:x))}/></div>
+                    <div className="text-[8px] font-black text-slate-400 uppercase">Stock <input type="number" className="w-full bg-slate-50 p-2 rounded-lg text-[11px] mt-1" value={p.stock || 0} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, stock:parseInt(e.target.value)}:x))}/></div>
+                    <div className="text-[8px] font-black text-slate-400 uppercase">BTW <select className="w-full bg-slate-50 p-2 rounded-lg text-[11px] mt-1" value={p.vatRate} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, vatRate:parseInt(e.target.value)}:x))}><option value={21}>21%</option><option value={0}>0%</option></select></div>
+                  </div>
+                </div>
+              ))}
+              <button onClick={()=>setProducts([...products, {id:Date.now().toString(), name:"Nieuw Product", price:0, vatRate:21, color:'bg-white', stock:0, updatedAt:Date.now()}])} className="w-full p-4 border-2 border-dashed rounded-2xl font-black text-slate-300 flex items-center justify-center gap-2"><Plus size={18}/> Product toevoegen</button>
+            </section>
+            <section className="bg-white p-5 rounded-[2.5rem] shadow-sm space-y-3">
+              <h2 className="font-black text-xs uppercase text-slate-400">Verkopers</h2>
+              {company.salesmen?.map((s, idx) => (
+                <div key={idx} className="flex justify-between items-center p-2 border-b text-sm font-bold"><span>{s}</span><button onClick={()=>setCompany({...company, salesmen: company.salesmen?.filter((_, i)=>i!==idx)})}><X size={14}/></button></div>
+              ))}
+              <button onClick={()=>{const n=prompt("Naam?"); if(n) setCompany({...company, salesmen:[...(company.salesmen||[]), n]})}} className="text-[10px] font-black text-slate-400 uppercase w-full py-2">+ Verkoper</button>
             </section>
           </div>
         )}
       </main>
 
-      {/* --- OVERLAYS --- */}
-
-      {/* CARD PROMPT */}
+      {/* --- POPUPS --- */}
       {showCardPrompt && (
-        <div className="fixed inset-0 bg-slate-950/90 z-[2000] flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[3rem] w-full max-w-xs text-center">
-            <CreditCard size={48} className="mx-auto text-blue-500 mb-4"/>
-            <h3 className="font-black text-lg mb-2">KAARTBETALING</h3>
-            <p className="text-sm text-slate-400 mb-6 font-medium">Is de transactie op de terminal voltooid?</p>
-            <div className="space-y-3">
-              <button onClick={()=>finalizePayment(PaymentMethod.CARD)} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black">JA, GELUKT</button>
-              <button onClick={()=>setShowCardPrompt(false)} className="w-full bg-slate-100 text-slate-400 py-4 rounded-2xl font-black">ANNULEREN</button>
-            </div>
+        <div className="fixed inset-0 bg-slate-950/90 z-[2000] flex items-center justify-center p-6 text-center">
+          <div className="bg-white p-8 rounded-[3rem] w-full max-w-xs">
+            <CreditCard size={48} className="mx-auto text-blue-500 mb-4"/><h3 className="font-black text-lg mb-6 uppercase">Kaartbetaling Gelukt?</h3>
+            <button onClick={()=>finalizePayment(PaymentMethod.CARD)} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black mb-3">JA, BEVESTIG</button>
+            <button onClick={()=>setShowCardPrompt(false)} className="w-full text-slate-400 font-bold">Annuleren</button>
           </div>
         </div>
       )}
 
-      {/* TICKET PREVIEW & PRINT */}
       {previewTransaction && (
         <div className="fixed inset-0 bg-slate-950/90 z-[3000] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] w-full max-w-xs flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b flex justify-between items-center">
-              <span className="font-black text-xs uppercase">Ticket Preview</span>
-              <button onClick={()=>setPreviewTransaction(null)}><X/></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 flex justify-center bg-slate-100">
-              <Receipt transaction={previewTransaction} company={company} preview={true} />
-            </div>
-            <div className="p-4 bg-white border-t space-y-3">
-              <button onClick={() => { btPrinterService.printReceipt(previewTransaction, company); setPreviewTransaction(null); }} className="w-full bg-slate-950 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2">
-                <Printer size={18}/> AFDRUKKEN
-              </button>
-              <button onClick={()=>setPreviewTransaction(null)} className="w-full text-slate-400 font-black text-xs py-2">SLUITEN</button>
-            </div>
+            <div className="p-4 border-b flex justify-between items-center"><span className="font-black text-[10px] uppercase">Ticket Preview</span><button onClick={()=>setPreviewTransaction(null)}><X/></button></div>
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-100 flex justify-center"><Receipt transaction={previewTransaction} company={company} preview={true}/></div>
+            <div className="p-4 space-y-3"><button onClick={()=>{btPrinterService.printReceipt(previewTransaction, company); setPreviewTransaction(null);}} className="w-full bg-slate-950 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2"><Printer size={18}/> PRINT TICKET</button></div>
           </div>
         </div>
       )}
 
-      {/* SALESMAN SELECTION */}
+      {isClosingSession && (
+        <div className="fixed inset-0 bg-slate-950/90 z-[2000] flex items-center justify-center p-6 text-white text-center">
+          <div className="w-full max-w-xs space-y-6">
+            <h3 className="font-black text-xl uppercase">Sessie Sluiten</h3>
+            <input type="number" value={endCashInput} onChange={e=>setEndCashInput(e.target.value)} className="w-full bg-slate-900 border-2 border-slate-800 p-5 rounded-2xl text-center text-3xl font-black" placeholder="0.00"/>
+            <button onClick={closeSession} className="w-full bg-red-600 py-5 rounded-2xl font-black uppercase">SLUIT KASSA & RAPPORT</button>
+            <button onClick={()=>setIsClosingSession(false)} className="text-slate-500 font-black">TERUG</button>
+          </div>
+        </div>
+      )}
+
       {showSalesmanSelection && (
         <div className="fixed inset-0 bg-slate-950/90 z-[2000] flex items-center justify-center p-6">
-          <div className="bg-white p-6 rounded-[2.5rem] w-full max-w-xs">
-             <h3 className="font-black text-center mb-4 uppercase">Selecteer Verkoper</h3>
-             <div className="grid gap-2">
-               {company.salesmen?.map(s => (
-                 <button key={s} onClick={()=>{setCompany({...company, sellerName: s}); setShowSalesmanSelection(false);}} className={`p-4 rounded-xl font-black border-2 ${company.sellerName === s ? 'border-amber-500 bg-amber-50' : 'border-slate-100'}`}>{s}</button>
-               ))}
-               <button onClick={()=>setShowSalesmanSelection(false)} className="mt-4 text-slate-400 font-bold">Annuleren</button>
-             </div>
+          <div className="bg-white p-6 rounded-[2.5rem] w-full max-w-xs space-y-2">
+            {company.salesmen?.map(s => <button key={s} onClick={()=>{setCompany({...company, sellerName:s}); setShowSalesmanSelection(false);}} className="w-full p-4 rounded-xl font-black border-2 border-slate-100 active:border-amber-500">{s}</button>)}
+            <button onClick={()=>setShowSalesmanSelection(false)} className="w-full py-2 text-slate-400 font-bold">Sluiten</button>
           </div>
         </div>
       )}
 
-      {/* CLOSE SESSION POPUP */}
-      {isClosingSession && (
-        <div className="fixed inset-0 bg-slate-950/90 z-[2000] flex items-center justify-center p-6 text-white">
-          <div className="w-full max-w-xs text-center space-y-6">
-            <h3 className="font-black text-xl uppercase">Sessie Afsluiten</h3>
-            <div className="space-y-2">
-              <p className="text-xs text-slate-500 font-black">CASH IN LADE (€)</p>
-              <input type="number" value={endCashInput} onChange={e=>setEndCashInput(e.target.value)} className="w-full bg-slate-900 p-5 rounded-2xl text-center text-2xl font-black border-2 border-slate-800 outline-none" placeholder="0.00"/>
-            </div>
-            <div className="grid gap-3">
-              <button onClick={closeSession} className="bg-red-600 text-white py-5 rounded-2xl font-black uppercase">AFSLUITEN & RAPPORT</button>
-              <button onClick={()=>setIsClosingSession(false)} className="text-slate-500 font-black">TERUG</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SUCCESS MESSAGE */}
-      {showSuccess && (
-        <div className="fixed inset-0 bg-emerald-500 z-[4000] flex flex-col items-center justify-center animate-in fade-in duration-300">
-           <CheckCircle size={80} className="text-white animate-bounce"/>
-           <h2 className="text-white font-black text-3xl mt-4 italic uppercase">Betaald!</h2>
-        </div>
-      )}
+      {showSuccess && <div className="fixed inset-0 bg-emerald-500 z-[4000] flex items-center justify-center animate-in fade-in duration-300"><CheckCircle size={80} className="text-white animate-bounce"/></div>}
     </div>
   );
-} 
+}
