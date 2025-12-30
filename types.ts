@@ -1,4 +1,3 @@
-
 export enum PaymentMethod {
   CASH = 'CASH',
   CARD = 'CARD',
@@ -29,6 +28,7 @@ export interface Transaction {
   vat21: number;
   total: number;
   paymentMethod: PaymentMethod;
+  sellerName?: string;
   updatedAt: number;
 }
 
@@ -42,15 +42,39 @@ export interface CashEntry {
   updatedAt: number;
 }
 
+export interface Seller {
+  id: string;
+  name: string;
+  role: 'ADMIN' | 'USER';
+  active: boolean;
+}
+
+export interface DailySummary {
+  totalSales: number;
+  transactionCount: number;
+  cashTotal: number;
+  cardTotal: number;
+  vat0Total: number;
+  vat21Total: number;
+  firstTicketId?: string;
+  lastTicketId?: string;
+}
+
 export interface SalesSession {
   id: string;
   startTime: number;
   endTime?: number;
-  startCash: number;
-  endCash?: number;
-  expectedCash?: number;
+  startCash: number;      // Je originele veld
+  endCash?: number;       // Je originele veld
+  expectedCash?: number;  // Je originele veld
   status: 'OPEN' | 'CLOSED';
-  summary?: DailySummary;
+  // Extra object voor de printer-compatibiliteit
+  cashManagement: {
+    openingBalance: number;
+    closingBalance: number;
+    difference: number;
+  };
+  summary: DailySummary;
   updatedAt: number;
 }
 
@@ -64,17 +88,6 @@ export interface CompanyDetails {
   salesmen?: string[];
   footerMessage: string;
   managerPin?: string;
-  masterPassword?: string; // Password to enter the app
+  masterPassword?: string;
   updatedAt: number;
-}
-
-export interface DailySummary {
-  totalSales: number;
-  transactionCount: number;
-  cashTotal: number;
-  cardTotal: number;
-  vat0Total: number;
-  vat21Total: number;
-  firstTicketId?: string;
-  lastTicketId?: string;
 }
