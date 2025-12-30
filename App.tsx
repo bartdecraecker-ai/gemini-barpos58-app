@@ -287,44 +287,156 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'SETTINGS' && (
-          <div className="p-4 h-full overflow-y-auto pb-24 space-y-6">
-            <section className="bg-white p-5 rounded-[2.5rem] shadow-sm space-y-3">
-              <h2 className="font-black text-xs uppercase text-slate-400">Company Data</h2>
-              <input className="w-full border-b p-1 font-bold" value={company.name} onChange={e=>setCompany({...company, name:e.target.value})} placeholder="Bedrijfsnaam"/>
-              <input className="w-full border-b p-1 text-xs" value={company.address} onChange={e=>setCompany({...company, address:e.target.value})} placeholder="Adres regel 1"/>
-              <input className="w-full border-b p-1 text-xs" value={company.address2} onChange={e=>setCompany({...company, address2:e.target.value})} placeholder="Adres regel 2"/>
-              <input className="w-full border-b p-1 text-xs" value={company.vatNumber} onChange={e=>setCompany({...company, vatNumber:e.target.value})} placeholder="BTW Nummer"/>
-            </section>
-            <section className="space-y-3">
-              <div className="flex justify-between items-center px-1">
-                <h2 className="font-black text-xs uppercase text-slate-400">Producten</h2>
-                <button onClick={() => { const m=activeMode==='SHOP'?'TOUR':'SHOP'; apiService.setActiveMode(m); setActiveMode(m); }} className="text-[10px] font-black border-2 px-3 py-1 rounded-full uppercase">Switch Modus</button>
-              </div>
-              {products.map(p => (
-                <div key={p.id} className="bg-white p-4 rounded-2xl border shadow-sm space-y-3">
-                  <div className="flex gap-2">
-                    <input className="flex-1 font-bold text-sm bg-transparent" value={p.name} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, name:e.target.value}:x))}/>
-                    <button onClick={()=>setProducts(products.filter(x=>x.id!==p.id))} className="text-red-300"><Trash2 size={16}/></button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="text-[8px] font-black text-slate-400 uppercase">Prijs <input type="number" className="w-full bg-slate-50 p-2 rounded-lg text-[11px] mt-1" value={p.price} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, price:parseFloat(e.target.value)}:x))}/></div>
-                    <div className="text-[8px] font-black text-slate-400 uppercase">Stock <input type="number" className="w-full bg-slate-50 p-2 rounded-lg text-[11px] mt-1" value={p.stock || 0} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, stock:parseInt(e.target.value)}:x))}/></div>
-                    <div className="text-[8px] font-black text-slate-400 uppercase">BTW <select className="w-full bg-slate-50 p-2 rounded-lg text-[11px] mt-1" value={p.vatRate} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, vatRate:parseInt(e.target.value)}:x))}><option value={21}>21%</option><option value={0}>0%</option></select></div>
-                  </div>
-                </div>
-              ))}
-              <button onClick={()=>setProducts([...products, {id:Date.now().toString(), name:"Nieuw Product", price:0, vatRate:21, color:'bg-white', stock:0, updatedAt:Date.now()}])} className="w-full p-4 border-2 border-dashed rounded-2xl font-black text-slate-300 flex items-center justify-center gap-2"><Plus size={18}/> Product toevoegen</button>
-            </section>
-            <section className="bg-white p-5 rounded-[2.5rem] shadow-sm space-y-3">
-              <h2 className="font-black text-xs uppercase text-slate-400">Verkopers</h2>
-              {company.salesmen?.map((s, idx) => (
-                <div key={idx} className="flex justify-between items-center p-2 border-b text-sm font-bold"><span>{s}</span><button onClick={()=>setCompany({...company, salesmen: company.salesmen?.filter((_, i)=>i!==idx)})}><X size={14}/></button></div>
-              ))}
-              <button onClick={()=>{const n=prompt("Naam?"); if(n) setCompany({...company, salesmen:[...(company.salesmen||[]), n]})}} className="text-[10px] font-black text-slate-400 uppercase w-full py-2">+ Verkoper</button>
-            </section>
+{activeTab === 'SETTINGS' && (
+  <div className="p-4 h-full overflow-y-auto pb-24 space-y-6">
+    
+    {/* 1. PRINTER STATUS & VERBINDING */}
+    <section className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-black text-[10px] uppercase text-slate-400 italic mb-1">Printer Status</h2>
+          <div className="flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full ${btConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            <span className="font-black text-xs uppercase">
+              {btConnected ? 'Bluetooth Printer Verbonden' : 'Geen printer gekoppeld'}
+            </span>
           </div>
-        )}
+        </div>
+        <button 
+          onClick={async () => {
+            const ok = await btPrinterService.connect();
+            setBtConnected(ok);
+          }}
+          className={`p-4 rounded-2xl transition-all active:scale-90 ${btConnected ? 'bg-slate-100 text-slate-400' : 'bg-slate-950 text-white shadow-lg shadow-slate-200'}`}
+        >
+          {btConnected ? <BluetoothConnected size={24} /> : <Bluetooth size={24} />}
+        </button>
+      </div>
+    </section>
+
+    {/* 2. BEDRIJFSGEGEVENS (Company Data met 2 adreslijnen) */}
+    <section className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Building2 size={18} className="text-slate-400" />
+        <h2 className="font-black text-[10px] uppercase text-slate-400 italic">Bedrijfsgegevens & Ticket</h2>
+      </div>
+      <div className="space-y-3">
+        <div className="group">
+          <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Bedrijfsnaam</label>
+          <input className="w-full border-b border-slate-100 p-2 font-bold text-sm outline-none focus:border-amber-500 transition-colors" value={company.name} onChange={e=>setCompany({...company, name: e.target.value})} placeholder="Bijv. De Krauker BV"/>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="group">
+            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Adres Regel 1</label>
+            <input className="w-full border-b border-slate-100 p-2 text-xs outline-none focus:border-amber-500" value={company.address} onChange={e=>setCompany({...company, address: e.target.value})} placeholder="Straat + Nr"/>
+          </div>
+          <div className="group">
+            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Adres Regel 2</label>
+            <input className="w-full border-b border-slate-100 p-2 text-xs outline-none focus:border-amber-500" value={company.address2} onChange={e=>setCompany({...company, address2: e.target.value})} placeholder="Postcode + Stad"/>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="group">
+            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">BTW Nummer</label>
+            <input className="w-full border-b border-slate-100 p-2 text-xs outline-none focus:border-amber-500" value={company.vatNumber} onChange={e=>setCompany({...company, vatNumber: e.target.value})} placeholder="BE 0XXX.XXX.XXX"/>
+          </div>
+          <div className="group">
+            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Website</label>
+            <input className="w-full border-b border-slate-100 p-2 text-xs outline-none focus:border-amber-500" value={company.website} onChange={e=>setCompany({...company, website: e.target.value})} placeholder="www.jouwzaak.be"/>
+          </div>
+        </div>
+        <div className="group">
+          <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Voettekst Ticket</label>
+          <textarea className="w-full border-b border-slate-100 p-2 text-xs outline-none focus:border-amber-500 h-16 resize-none" value={company.footerMessage} onChange={e=>setCompany({...company, footerMessage: e.target.value})} placeholder="Bedankt voor uw bezoek!"/>
+        </div>
+      </div>
+    </section>
+
+    {/* 3. PRODUCTBEHEER (Stock, BTW & Modus Wissel) */}
+    <section className="space-y-4">
+      <div className="flex justify-between items-end px-2">
+        <div className="flex items-center gap-2">
+          <Package size={18} className="text-slate-400" />
+          <h2 className="font-black text-[10px] uppercase text-slate-400 italic">Producten ({activeMode})</h2>
+        </div>
+        <button 
+          onClick={() => { 
+            const newMode = activeMode === 'SHOP' ? 'TOUR' : 'SHOP'; 
+            apiService.setActiveMode(newMode); 
+            setActiveMode(newMode); 
+          }} 
+          className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 font-black text-[9px] uppercase transition-all active:scale-95 ${activeMode === 'SHOP' ? 'border-amber-500 text-amber-600 bg-amber-50' : 'border-indigo-500 text-indigo-600 bg-indigo-50'}`}
+        >
+          <RefreshCcw size={12}/> Wissel naar {activeMode === 'SHOP' ? 'TOUR' : 'SHOP'}
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {products.map(p => (
+          <div key={p.id} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Productnaam</label>
+                <input className="w-full font-bold text-sm bg-transparent border-b border-transparent focus:border-slate-200 outline-none" value={p.name} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, name:e.target.value}:x))}/>
+              </div>
+              <button onClick={()=>setProducts(products.filter(x=>x.id!==p.id))} className="w-10 h-10 flex items-center justify-center rounded-xl bg-red-50 text-red-400 active:bg-red-100 transition-colors"><Trash2 size={18}/></button>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Prijs (€)</label>
+                <input type="number" className="w-full bg-transparent font-black text-sm outline-none" value={p.price} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, price:parseFloat(e.target.value)}:x))}/>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Stock</label>
+                <input type="number" className="w-full bg-transparent font-black text-sm outline-none text-blue-600" value={p.stock || 0} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, stock:parseInt(e.target.value)}:x))}/>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">BTW %</label>
+                <select className="w-full bg-transparent font-black text-sm outline-none appearance-none" value={p.vatRate} onChange={e=>setProducts(products.map(x=>x.id===p.id?{...x, vatRate:parseInt(e.target.value)}:x))}>
+                  <option value={21}>21%</option>
+                  <option value={0}>0%</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        ))}
+        
+        <button 
+          onClick={()=>setProducts([...products, {id:Date.now().toString(), name:"Nieuw Product", price:0, vatRate:21, color:'bg-white', stock:0, updatedAt:Date.now()}])} 
+          className="w-full p-6 border-2 border-dashed border-slate-200 rounded-[2rem] font-black text-slate-400 flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
+        >
+          <Plus size={20}/> PRODUCT TOEVOEGEN
+        </button>
+      </div>
+    </section>
+
+    {/* 4. VERKOPERSBEHEER */}
+    <section className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Users size={18} className="text-slate-400" />
+        <h2 className="font-black text-[10px] uppercase text-slate-400 italic">Verkopers</h2>
+      </div>
+      <div className="space-y-2">
+        {company.salesmen?.map((s, idx) => (
+          <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="font-bold text-sm text-slate-700">{s}</span>
+            <button onClick={() => setCompany({...company, salesmen: company.salesmen?.filter((_, i) => i !== idx)})} className="text-red-300 hover:text-red-500 transition-colors">
+              <UserMinus size={18}/>
+            </button>
+          </div>
+        ))}
+        <button 
+          onClick={() => { const n = prompt("Naam nieuwe verkoper:"); if(n) setCompany({...company, salesmen: [...(company.salesmen || []), n]}); }} 
+          className="w-full py-4 text-[10px] font-black text-slate-400 uppercase border-2 border-dotted border-slate-200 rounded-xl hover:bg-slate-50 transition-colors mt-2"
+        >
+          + VERKOPER TOEVOEGEN
+        </button>
+      </div>
+    </section>
+
+  </div>
+)}
       </main>
 
       {/* --- POPUPS --- */}
