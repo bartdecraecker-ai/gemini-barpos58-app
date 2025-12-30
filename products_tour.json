@@ -1,0 +1,13 @@
+
+[
+  { "id": "T1", "name": "Tour Pintje (Blik)", "price": 4.00, "vatRate": 21, "color": "bg-indigo-200", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "T2", "name": "Tour Wijn (Fles)", "price": 22.00, "vatRate": 21, "color": "bg-rose-200", "stock": 20, "updatedAt": 1715424000000 },
+  { "id": "T3", "name": "Tour T-Shirt", "price": 25.00, "vatRate": 21, "color": "bg-slate-300", "stock": 50, "updatedAt": 1715424000000 },
+  { "id": "T4", "name": "Tour Hoody", "price": 45.00, "vatRate": 21, "color": "bg-slate-400", "stock": 20, "updatedAt": 1715424000000 },
+  { "id": "T5", "name": "Frisdrank Blik", "price": 3.50, "vatRate": 21, "color": "bg-sky-200", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "T6", "name": "Tour Pakket", "price": 50.00, "vatRate": 21, "color": "bg-violet-300", "stock": 10, "updatedAt": 1715424000000 },
+  { "id": "T7", "name": "Postkaart", "price": 2.00, "vatRate": 21, "color": "bg-yellow-200", "stock": 500, "updatedAt": 1715424000000 },
+  { "id": "T8", "name": "Tour Glas", "price": 8.00, "vatRate": 21, "color": "bg-teal-100", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "T9", "name": "Tour Ticket", "price": 15.00, "vatRate": 0, "color": "bg-emerald-300", "stock": 999, "updatedAt": 1715424000000 },
+  { "id": "T10", "name": "Service Fee", "price": 2.50, "vatRate": 0, "color": "bg-gray-300", "stock": 999, "updatedAt": 1715424000000 }
+]

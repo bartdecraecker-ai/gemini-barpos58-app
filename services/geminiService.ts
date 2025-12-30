@@ -1,51 +1,52 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Transaction, DailySummary } from "../types";
 
 export const generateDailyInsight = async (
   transactions: Transaction[],
-  summary: DailySummary
+  summary: DailySummary,
+  mode: string
 ): Promise<string> => {
-  // Always use process.env.API_KEY directly when initializing.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  // Prepare a lightweight data summary to send to the model
-  const salesData = transactions.map(t => ({
-    time: new Date(t.timestamp).toLocaleTimeString('nl-NL'),
+  const salesData = transactions.slice(0, 30).map(t => ({
+    time: new Date(t.timestamp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }),
     total: t.total,
     items: t.items.map(i => `${i.quantity}x ${i.name}`).join(', '),
     method: t.paymentMethod
   }));
 
   const prompt = `
-    Je bent een assistent van een barmanager. Analyseer de volgende verkoopgegevens voor vandaag.
-    
-    Samenvatting:
-    Totale Omzet: €${summary.totalSales.toFixed(2)}
-    Cash: €${summary.cashTotal.toFixed(2)}
-    Kaart: €${summary.cardTotal.toFixed(2)}
-    Transacties: ${summary.transactionCount}
+    Je bent een senior business consultant voor een bar genaamd "DE GEZELLIGE BAR". 
+    Analyseer de prestaties van de huidige sessie (${mode} modus).
 
-    Gedetailleerd Logboek (Sample):
-    ${JSON.stringify(salesData.slice(0, 50))} 
-    
-    Geef alsjeblieft:
-    1. Een kort sentiment over de prestaties van vandaag.
-    2. Identificeer de best verkopende items of categorieën op basis van het logboek.
-    3. Eén actiebare tip voor morgen.
-    
-    Houd het beknopt (maximaal 150 woorden). Formatteer als een vriendelijk tekstbericht in het Nederlands.
+    DATA SAMENVATTING:
+    - Totale Omzet: €${summary.totalSales.toFixed(2)}
+    - Transacties: ${summary.transactionCount}
+    - Verhouding Cash/Kaart: €${summary.cashTotal.toFixed(2)} / €${summary.cardTotal.toFixed(2)}
+
+    LAATSTE TRANSACTIES:
+    ${JSON.stringify(salesData)}
+
+    GEEF JE ANALYSE IN HET NEDERLANDS:
+    1. **Prestatie Score**: (Geef een cijfer op 10 en korte motivatie).
+    2. **Trends**: Welke tijdstippen waren het drukst en welke producten vlogen de deur uit?
+    3. **Strategisch Advies**: Geef één concrete tip om de omzet of efficiëntie voor de volgende shift te verhogen.
+
+    Houd het professioneel, actiegericht en beknopt. Gebruik Markdown formatting.
   `;
 
   try {
-    // Using gemini-3-flash-preview for text analysis task as per guidelines.
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
+      config: {
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     });
-    // Use .text property to access content directly.
-    return response.text || "Geen inzicht gegenereerd.";
+    return response.text || "Geen analyse beschikbaar.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Kan op dit moment geen inzichten genereren. Controleer je verbinding.";
+    return "De AI consultant is momenteel niet bereikbaar. Controleer je API sleutel of internetverbinding.";
   }
 };

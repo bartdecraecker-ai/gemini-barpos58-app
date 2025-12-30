@@ -5,8 +5,8 @@
   "address2": "1000 Brussel",
   "vatNumber": "BTW BE0123.456.789",
   "website": "www.degezelligebar.be",
-  "sellerName": "Jan",
-  "salesmen": ["Jan", "Piet"],
+  "sellerName": "Bart",
+  "salesmen": ["Bart", "Tina"],
   "footerMessage": "Bedankt en tot ziens!",
   "masterPassword": "1984",
   "updatedAt": 1715424000000

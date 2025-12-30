@@ -132,27 +132,30 @@ export class BluetoothPrinterService {
   private textEncoder = new TextEncoder();
 
   // Helper to create a single line with left and right aligned text
-  private formatLine(left: string, right: string): string {
-    const spacesNeeded = Math.max(1, LINE_WIDTH - left.length - right.length);
-    return left + ' '.repeat(spacesNeeded) + right + '\n';
+  private formatLine(left: any, right: any): string {
+    const leftStr = String(left || '');
+    const rightStr = String(right || '');
+    const spacesNeeded = Math.max(0, LINE_WIDTH - leftStr.length - rightStr.length);
+    return leftStr + ' '.repeat(spacesNeeded) + rightStr + '\n';
   }
 
   async printReceipt(transaction: Transaction, company: CompanyDetails) {
+    if (!transaction) return;
     const cmds: (string | Uint8Array)[] = [
-      INIT, '\n', CENTER, BOLD_ON, company.name + '\n', BOLD_OFF,
-      company.address + '\n', 
+      INIT, '\n', CENTER, BOLD_ON, (company.name || 'BAR') + '\n', BOLD_OFF,
+      (company.address || '') + '\n', 
       company.address2 ? company.address2 + '\n' : '',
-      `BTW: ${company.vatNumber}\n`,
+      `BTW: ${company.vatNumber || '-'}\n`,
       company.website ? company.website + '\n' : '',
       '--------------------------------\n', LEFT,
-      `${transaction.dateStr} ${new Date(transaction.timestamp).toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'})}\n`,
-      `Ticket #: ${transaction.id}\n`,
+      `${transaction.dateStr || ''} ${new Date(transaction.timestamp).toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'})}\n`,
+      `Ticket #: ${transaction.id || 'N/A'}\n`,
       '--------------------------------\n'
     ];
 
-    transaction.items.forEach(item => {
+    (transaction.items || []).forEach(item => {
       const lineTotal = (item.price * item.quantity).toFixed(2).replace('.', ',');
-      const itemDescription = `${item.quantity}x ${item.name}`;
+      const itemDescription = `${item.quantity}x ${item.name || 'Onbekend'}`;
       const unitPriceStr = `(${item.price.toFixed(2).replace('.', ',')} / st)`;
       
       cmds.push(this.formatLine(itemDescription, lineTotal));
@@ -172,37 +175,40 @@ export class BluetoothPrinterService {
       cmds.push(this.formatLine(vatLabel, vatValue));
     }
 
-    cmds.push(CENTER, '\n', company.footerMessage, '\n\n', '\n', CUT);
+    cmds.push(CENTER, '\n', company.footerMessage || 'Bedankt!', '\n\n', '\n', CUT);
     await this.send(this.combineCommands(cmds));
   }
 
   async printSessionReport(session: SalesSession, transactions: Transaction[], company: CompanyDetails) {
-    const sortedTx = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
+    if (!session) return;
+    const sortedTx = [...(transactions || [])].sort((a, b) => a.timestamp - b.timestamp);
     const productBreakdown: Record<string, { name: string, price: number, qty: number }> = {};
     let totalItems = 0;
     
     sortedTx.forEach(tx => {
-      tx.items.forEach(item => {
+      (tx.items || []).forEach(item => {
         const key = `${item.name}_${item.price}`;
         if (!productBreakdown[key]) {
-          productBreakdown[key] = { name: item.name, price: item.price, qty: 0 };
+          productBreakdown[key] = { name: item.name || 'Onbekend', price: item.price || 0, qty: 0 };
         }
-        productBreakdown[key].qty += item.quantity;
-        totalItems += item.quantity;
+        productBreakdown[key].qty += item.quantity || 0;
+        totalItems += item.quantity || 0;
       });
     });
 
     const summary = session.summary;
-    const firstId = sortedTx.length > 0 ? sortedTx[0].id : (summary?.firstTicketId || 'N/A');
-    const lastId = sortedTx.length > 0 ? sortedTx[sortedTx.length - 1].id : (summary?.lastTicketId || 'N/A');
+    const firstIdRaw = sortedTx.length > 0 ? sortedTx[0].id : (summary?.firstTicketId || 'N/A');
+    const lastIdRaw = sortedTx.length > 0 ? sortedTx[sortedTx.length - 1].id : (summary?.lastTicketId || 'N/A');
+    const firstId = String(firstIdRaw || 'N/A');
+    const lastId = String(lastIdRaw || 'N/A');
 
     const formatCurrency = (val: number = 0) => `EUR ${val.toFixed(2).replace('.', ',')}`;
 
-    const cmds: (string | Uint8Array)[] = [
+    const cmds: (string | Uint8Array | undefined)[] = [
       INIT, '\n', CENTER, BOLD_ON, "SESSIE RAPPORT\n", BOLD_OFF,
-      company.name + '\n',
+      (company.name || 'BAR') + '\n',
       '--------------------------------\n', LEFT,
-      `Sessie ID: ${session.id.substring(0, 16)}\n`,
+      `Sessie ID: ${String(session.id || '').substring(0, 16)}\n`,
       `Tickets: ${firstId.slice(-4)} -> ${lastId.slice(-4)}\n`,
       `Datum: ${new Date(session.startTime).toLocaleDateString('nl-NL')}\n`,
       `Start: ${new Date(session.startTime).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}\n`,
@@ -233,22 +239,25 @@ export class BluetoothPrinterService {
 
     items.forEach(item => {
       const priceSuffix = item.price < 0 ? " (Ret)" : "";
-      const label = `${item.name}${priceSuffix}`.substring(0, 20);
+      const label = `${item.name}${priceSuffix}`.substring(0, 24);
       const qtyStr = `${item.qty}x`;
       cmds.push(this.formatLine(label, qtyStr));
     });
 
     cmds.push('--------------------------------\n');
-    cmds.push(this.formatLine("TOTAAL ARTIKELEN:", totalItems.toString()));
-    cmds.push('\n', CENTER, "*** EINDE RAPPORT ***\n\n", '\n', CUT);
-    await this.send(this.combineCommands(cmds));
+    cmds.push(this.formatLine("TOTAAL ARTIKELEN:", String(totalItems)));
+    cmds.push('\n', CENTER, "*** EINDE RAPPORT ***\n\n\n\n\n", CUT);
+    
+    // Filter out undefined to avoid crash in combineCommands
+    const validCmds = cmds.filter((c): c is string | Uint8Array => c !== undefined);
+    await this.send(this.combineCommands(validCmds));
   }
 
   async testPrint() {
     const cmds = [
       INIT, '\n', CENTER, BOLD_ON, "BAR POS TEST\n", BOLD_OFF,
       "Status: Verbonden\n", new Date().toLocaleString('nl-NL') + "\n\n",
-      "Ready to serve!\n\n", '\n', CUT
+      "Ready to serve!\n\n\n\n\n", CUT
     ];
     await this.send(this.combineCommands(cmds));
   }
@@ -259,7 +268,11 @@ export class BluetoothPrinterService {
   }
 
   private combineCommands(cmds: (string | Uint8Array)[]): Uint8Array {
-    const buffers = cmds.map(c => typeof c === 'string' ? this.textEncoder.encode(c) : c);
+    const buffers = cmds.map(c => {
+      if (typeof c === 'string') return this.textEncoder.encode(c);
+      if (c instanceof Uint8Array) return c;
+      return new Uint8Array();
+    });
     const totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
     const res = new Uint8Array(totalLength);
     let offset = 0;

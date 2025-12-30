@@ -1,48 +1,57 @@
 
 import { Product, Transaction, SalesSession, CashEntry, CompanyDetails } from '../types';
 
-/**
- * CLOUD-READY API SERVICE
- * Interacts with localStorage for persistence and seeds from local JSON files if empty.
- */
-
-const CLOUD_DELAY = 300; 
-
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+export type AppMode = 'SHOP' | 'TOUR';
 
 export const apiService = {
+  // Global Mode Storage
+  getActiveMode(): AppMode | null {
+    return (localStorage.getItem('barpos_active_mode') as AppMode) || null;
+  },
+
+  setActiveMode(mode: AppMode) {
+    localStorage.setItem('barpos_active_mode', mode);
+  },
+
   async get(key: string): Promise<any> {
-    await wait(CLOUD_DELAY);
-    const data = localStorage.getItem(`barpos_cloud_${key}`);
+    const mode = this.getActiveMode();
+    if (!mode) return null; // No mode selected yet
+    
+    const storageKey = `barpos_${mode}_${key}`;
+    const data = localStorage.getItem(storageKey);
     
     if (!data) {
-      // Seed from JSON files if it's the first time
+      // Seed data from JSON if not in storage
       try {
         if (key === 'products') {
-          const res = await fetch('/products.json');
+          const fileName = mode === 'TOUR' ? '/products_tour.json' : '/products_shop.json';
+          const res = await fetch(fileName);
           if (res.ok) return await res.json();
         }
         if (key === 'company') {
           const res = await fetch('/company.json');
-          if (res.ok) return await res.json();
+          if (res.ok) {
+            const company = await res.json();
+            return { ...company, name: `${company.name} - ${mode}` };
+          }
         }
       } catch (e) {
         console.error("Failed to seed from JSON file", e);
       }
       return null;
     }
-    
     return JSON.parse(data);
   },
 
   async save(key: string, data: any): Promise<void> {
-    await wait(100);
-    localStorage.setItem(`barpos_cloud_${key}`, JSON.stringify(data));
+    const mode = this.getActiveMode();
+    if (!mode) return;
+    const storageKey = `barpos_${mode}_${key}`;
+    localStorage.setItem(storageKey, JSON.stringify(data));
   },
 
   async getProducts(): Promise<Product[]> {
-    const data = await this.get('products');
-    return data || [];
+    return (await this.get('products')) || [];
   },
 
   async saveProducts(products: Product[]): Promise<void> {
@@ -50,8 +59,7 @@ export const apiService = {
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    const data = await this.get('transactions');
-    return data || [];
+    return (await this.get('transactions')) || [];
   },
 
   async saveTransactions(transactions: Transaction[]): Promise<void> {
@@ -59,21 +67,11 @@ export const apiService = {
   },
 
   async getSessions(): Promise<SalesSession[]> {
-    const data = await this.get('sessions');
-    return data || [];
+    return (await this.get('sessions')) || [];
   },
 
   async saveSessions(sessions: SalesSession[]): Promise<void> {
     await this.save('sessions', sessions);
-  },
-
-  async getCashEntries(): Promise<CashEntry[]> {
-    const data = await this.get('cashentries');
-    return data || [];
-  },
-
-  async saveCashEntries(entries: CashEntry[]): Promise<void> {
-    await this.save('cashentries', entries);
   },
 
   async getCompany(): Promise<CompanyDetails | null> {

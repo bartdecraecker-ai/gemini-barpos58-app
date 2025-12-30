@@ -1,0 +1,120 @@
+{
+  "products": [
+    {
+      "id": "1",
+      "name": "Pintje",
+      "price": 3.2,
+      "vatRate": 21,
+      "color": "bg-amber-200",
+      "stock": 100,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "2",
+      "name": "Huiswijn",
+      "price": 5.5,
+      "vatRate": 21,
+      "color": "bg-red-200",
+      "stock": 50,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "3",
+      "name": "Cocktail",
+      "price": 11,
+      "vatRate": 21,
+      "color": "bg-purple-200",
+      "stock": 30,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "4",
+      "name": "Frisdrank",
+      "price": 3,
+      "vatRate": 21,
+      "color": "bg-blue-100",
+      "stock": 60,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "5",
+      "name": "Water",
+      "price": 2.8,
+      "vatRate": 21,
+      "color": "bg-cyan-100",
+      "stock": 60,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "6",
+      "name": "Koffie",
+      "price": 3,
+      "vatRate": 21,
+      "color": "bg-stone-200",
+      "stock": 100,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "7",
+      "name": "Thee",
+      "price": 3,
+      "vatRate": 21,
+      "color": "bg-emerald-100",
+      "stock": 100,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "8",
+      "name": "Chips",
+      "price": 2.5,
+      "vatRate": 21,
+      "color": "bg-orange-200",
+      "stock": 40,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "9",
+      "name": "Cadeaubon",
+      "price": 20,
+      "vatRate": 0,
+      "color": "bg-green-200",
+      "stock": 999,
+      "updatedAt": 1715424000000
+    },
+    {
+      "id": "10",
+      "name": "Waarborg",
+      "price": 1,
+      "vatRate": 0,
+      "color": "bg-gray-200",
+      "stock": 999,
+      "updatedAt": 1715424000000
+    }
+  ],
+  "transactions": [],
+  "sessions": [
+    {
+      "id": "S1767046745133",
+      "startTime": 1767046745133,
+      "startCash": 0,
+      "status": "OPEN",
+      "updatedAt": 1767046745133
+    }
+  ],
+  "company": {
+    "name": "DE GEZELLIGE BAR",
+    "address": "Grote Markt 1",
+    "address2": "1000 Brussel",
+    "vatNumber": "BTW BE0123.456.789",
+    "website": "www.degezelligebar.be",
+    "sellerName": "Piet",
+    "salesmen": [
+      "Jan",
+      "Piet"
+    ],
+    "footerMessage": "Bedankt en tot ziens!",
+    "masterPassword": "1984",
+    "updatedAt": 1767046874785
+  },
+  "exportDate": 1767046899442
+}

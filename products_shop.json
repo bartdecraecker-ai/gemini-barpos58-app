@@ -1,0 +1,13 @@
+
+[
+  { "id": "S1", "name": "Pintje (Tap)", "price": 3.20, "vatRate": 21, "color": "bg-amber-200", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "S2", "name": "Huiswijn Glas", "price": 5.50, "vatRate": 21, "color": "bg-red-200", "stock": 50, "updatedAt": 1715424000000 },
+  { "id": "S3", "name": "Cocktail", "price": 11.00, "vatRate": 21, "color": "bg-purple-200", "stock": 30, "updatedAt": 1715424000000 },
+  { "id": "S4", "name": "Frisdrank", "price": 3.00, "vatRate": 21, "color": "bg-blue-100", "stock": 60, "updatedAt": 1715424000000 },
+  { "id": "S5", "name": "Water", "price": 2.80, "vatRate": 21, "color": "bg-cyan-100", "stock": 60, "updatedAt": 1715424000000 },
+  { "id": "S6", "name": "Koffie", "price": 3.00, "vatRate": 21, "color": "bg-stone-200", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "S7", "name": "Thee", "price": 3.00, "vatRate": 21, "color": "bg-emerald-100", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "S8", "name": "Chips", "price": 2.50, "vatRate": 21, "color": "bg-orange-200", "stock": 40, "updatedAt": 1715424000000 },
+  { "id": "S9", "name": "Cadeaubon", "price": 20.00, "vatRate": 0, "color": "bg-green-200", "stock": 999, "updatedAt": 1715424000000 },
+  { "id": "S10", "name": "Waarborg", "price": 1.00, "vatRate": 0, "color": "bg-gray-200", "stock": 999, "updatedAt": 1715424000000 }
+]
