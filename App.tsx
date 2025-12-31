@@ -249,13 +249,12 @@ export default function App() {
     setPreviewTransaction(tx);
   };
 
-  const closeSession = async (endCashAmount: number) => {
-    if (!currentSession) return;
-    const sessionTx = transactions.filter(t => t.sessionId === currentSession.id);
+  const calculateSessionSummary = (sessionId: string): DailySummary => {
+    const sessionTx = transactions.filter(t => t.sessionId === sessionId);
     const cashSales = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((sum, t) => sum + t.total, 0);
     const cardSales = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((sum, t) => sum + t.total, 0);
     
-    const summary: DailySummary = {
+    return {
       totalSales: sessionTx.reduce((sum, b) => sum + b.total, 0),
       transactionCount: sessionTx.length,
       cashTotal: cashSales,
@@ -265,8 +264,13 @@ export default function App() {
       firstTicketId: sessionTx.length > 0 ? sessionTx[sessionTx.length - 1].id : undefined,
       lastTicketId: sessionTx.length > 0 ? sessionTx[0].id : undefined
     };
+  };
+
+  const closeSession = async (endCashAmount: number) => {
+    if (!currentSession) return;
+    const summary = calculateSessionSummary(currentSession.id);
+    const expectedCash = (currentSession.startCash || 0) + summary.cashTotal;
     
-    const expectedCash = (currentSession.startCash || 0) + cashSales;
     const closedSession: SalesSession = {
       ...currentSession,
       status: 'CLOSED',
@@ -292,6 +296,24 @@ export default function App() {
       await btPrinterService.printSessionReport(session, sessionTx, company);
     } catch (e: any) {
       alert("Print Fout: " + e.message);
+    }
+  };
+
+  const runAiAnalysis = async () => {
+    const sessionToAnalyze = currentSession || sessions.find(s => s.status === 'CLOSED');
+    if (!sessionToAnalyze) return alert("Geen sessie data om te analyseren.");
+    
+    const summary = sessionToAnalyze.summary || calculateSessionSummary(sessionToAnalyze.id);
+    const sessionTx = transactions.filter(t => t.sessionId === sessionToAnalyze.id);
+    
+    setIsGeneratingInsight(true);
+    try {
+      const insight = await generateDailyInsight(sessionTx, summary, activeMode!);
+      setAiInsight(insight);
+    } catch (e) {
+      alert("AI Analyse mislukt.");
+    } finally {
+      setIsGeneratingInsight(false);
     }
   };
 
@@ -527,12 +549,26 @@ export default function App() {
                     <p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.3em]">Shift Overzicht</p>
                  </div>
                  <button 
-                  onClick={() => {/* AI Integration */}} 
+                  onClick={runAiAnalysis}
+                  disabled={isGeneratingInsight}
                   className="bg-indigo-600 text-white p-3.5 rounded-xl shadow-lg flex items-center gap-2 font-black text-[9px] uppercase tracking-widest disabled:opacity-50 active:scale-95 transition-all"
                  >
-                   <Sparkles size={14}/> Analyseer
+                   {isGeneratingInsight ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14}/>} Analyseer
                  </button>
               </div>
+
+              {aiInsight && (
+                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 animate-in fade-in slide-in-from-bottom relative">
+                   <button onClick={() => setAiInsight(null)} className="absolute top-4 right-4 text-slate-300"><X size={16}/></button>
+                   <div className="flex items-center gap-2 mb-4">
+                      <Sparkles size={16} className="text-indigo-500"/>
+                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">AI Business Consultant</span>
+                   </div>
+                   <div className="prose prose-sm text-slate-600 font-medium text-[12px] leading-relaxed whitespace-pre-wrap">
+                      {aiInsight}
+                   </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                  {currentSession && (
@@ -765,11 +801,6 @@ export default function App() {
                      {company.sellerName === name && <Check size={18}/>}
                    </button>
                  ))}
-                 {(company.salesmen || []).length === 0 && (
-                   <div className="text-center py-6 text-slate-400 italic text-xs">
-                      Geen medewerkers ingesteld.<br/>Ga naar Beheer -> Verkopers.
-                   </div>
-                 )}
               </div>
               <div className="flex flex-col gap-3">
                  <button onClick={() => setShowSalesmanSelection(false)} className="w-full bg-slate-950 text-white py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Bevestigen</button>
