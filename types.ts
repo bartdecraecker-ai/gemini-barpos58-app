@@ -1,13 +1,14 @@
+
 export enum PaymentMethod {
   CASH = 'CASH',
-  CARD = 'CARD'
+  CARD = 'CARD',
 }
 
 export interface Product {
   id: string;
   name: string;
   price: number;
-  vatRate: 0 | 21;
+  vatRate: number; // Changed from 0 | 21 to number to support 21.5
   color?: string;
   stock?: number;
   updatedAt: number;
@@ -25,10 +26,9 @@ export interface Transaction {
   items: CartItem[];
   subtotal: number;
   vat0: number;
-  vat21: number;
+  vatHigh: number; // Renamed from vat21 to vatHigh for clarity with 21.5%
   total: number;
   paymentMethod: PaymentMethod;
-  sellerName?: string;
   updatedAt: number;
 }
 
@@ -42,39 +42,15 @@ export interface CashEntry {
   updatedAt: number;
 }
 
-export interface Seller {
-  id: string;
-  name: string;
-  role: 'ADMIN' | 'USER';
-  active: boolean;
-}
-
-export interface DailySummary {
-  totalSales: number;
-  transactionCount: number;
-  cashTotal: number;
-  cardTotal: number;
-  vat0Total: number;
-  vat21Total: number;
-  firstTicketId?: string;
-  lastTicketId?: string;
-}
-
 export interface SalesSession {
   id: string;
   startTime: number;
   endTime?: number;
-  startCash: number;      // Je originele veld
-  endCash?: number;       // Je originele veld
-  expectedCash?: number;  // Je originele veld
+  startCash: number;
+  endCash?: number;
+  expectedCash?: number;
   status: 'OPEN' | 'CLOSED';
-  // Extra object voor de printer-compatibiliteit
-  cashManagement: {
-    openingBalance: number;
-    closingBalance: number;
-    difference: number;
-  };
-  summary: DailySummary;
+  summary?: DailySummary;
   updatedAt: number;
 }
 
@@ -90,4 +66,15 @@ export interface CompanyDetails {
   managerPin?: string;
   masterPassword?: string;
   updatedAt: number;
+}
+
+export interface DailySummary {
+  totalSales: number;
+  transactionCount: number;
+  cashTotal: number;
+  cardTotal: number;
+  vat0Total: number;
+  vatHighTotal: number; // Updated naming
+  firstTicketId?: string;
+  lastTicketId?: string;
 }
