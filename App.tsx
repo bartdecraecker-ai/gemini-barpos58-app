@@ -5,19 +5,18 @@ import {
   CheckCircle, PlayCircle, Lock, Loader2, User, ChevronDown, 
   Printer, Bluetooth, Store, MapPin, Delete, Calendar, Check, AlertCircle, 
   BluetoothConnected, LogOut, RefreshCcw, Package, Building2, Users, ShieldCheck, Database, Sparkles, Eye,
-  // Fix: Added missing Save icon import
   Save
 } from 'lucide-react';
-import { PaymentMethod } from './types';
-import type { Product, CartItem, Transaction, CompanyDetails, SalesSession, DailySummary, CloudConfig } from './types';
-import { DEFAULT_COMPANY, INITIAL_PRODUCTS, AVAILABLE_COLORS } from './constants';
-import { Receipt } from './components/Receipt';
-import { apiService } from './services/api';
-import type { AppMode } from './services/api';
-import { btPrinterService } from './services/bluetoothPrinter';
-import { generateDailyInsight } from './services/geminiService';
+import { PaymentMethod } from './types.ts';
+import type { Product, CartItem, Transaction, CompanyDetails, SalesSession, DailySummary, CloudConfig } from './types.ts';
+import { DEFAULT_COMPANY, INITIAL_PRODUCTS, AVAILABLE_COLORS } from './constants.ts';
+import { Receipt } from './components/Receipt.tsx';
+import { apiService } from './services/api.ts';
+import type { AppMode } from './services/api.ts';
+import { btPrinterService } from './services/bluetoothPrinter.ts';
+import { generateDailyInsight } from './services/geminiService.ts';
 
-const APP_VERSION = "1.0.2-PROD";
+const APP_VERSION = "1.0.3-PROD";
 
 export default function App() {
   // Authentication & Mode State
