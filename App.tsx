@@ -440,17 +440,19 @@ export default function App() {
 
   // Helper for Session Aggregation Breakdown
   const getSessionBreakdown = (session: SalesSession) => {
+    if (!session || !session.id) return [];
     const sessionTx = transactions.filter(t => t.sessionId === session.id);
     const productBreakdown: Record<string, { name: string, qty: number, total: number }> = {};
     
     sessionTx.forEach(tx => {
+      if (!tx.items) return;
       tx.items.forEach(item => {
         const key = item.id;
         if (!productBreakdown[key]) {
-          productBreakdown[key] = { name: item.name, qty: 0, total: 0 };
+          productBreakdown[key] = { name: item.name || 'Onbekend', qty: 0, total: 0 };
         }
-        productBreakdown[key].qty += item.quantity;
-        productBreakdown[key].total += item.quantity * item.price;
+        productBreakdown[key].qty += (item.quantity || 0);
+        productBreakdown[key].total += (item.quantity || 0) * (item.price || 0);
       });
     });
 
@@ -690,15 +692,15 @@ export default function App() {
                        <div className="grid grid-cols-3 gap-4 border-t border-slate-50 pt-6">
                           <div className="flex flex-col">
                              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Huidige Verkoop</span>
-                             <span className="font-black text-lg text-slate-900 font-mono">€{transactions.filter(t => t.sessionId === currentSession.id).reduce((s,t)=>s+t.total, 0).toFixed(2)}</span>
+                             <span className="font-black text-lg text-slate-900 font-mono">€{transactions.filter(t => t.sessionId === (currentSession?.id || '')).reduce((s,t)=>s+t.total, 0).toFixed(2)}</span>
                           </div>
                           <div className="flex flex-col">
                              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tickets</span>
-                             <span className="font-black text-lg text-slate-900 font-mono">{transactions.filter(t => t.sessionId === currentSession.id).length}</span>
+                             <span className="font-black text-lg text-slate-900 font-mono">{transactions.filter(t => t.sessionId === (currentSession?.id || '')).length}</span>
                           </div>
                           <div className="flex flex-col">
                              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">In Kas (Verwacht)</span>
-                             <span className="font-black text-lg text-slate-900 font-mono">€{(currentSession.startCash + transactions.filter(t => t.sessionId === currentSession.id && t.paymentMethod === PaymentMethod.CASH).reduce((s,t)=>s+t.total, 0)).toFixed(2)}</span>
+                             <span className="font-black text-lg text-slate-900 font-mono">€{((currentSession?.startCash || 0) + transactions.filter(t => t.sessionId === (currentSession?.id || '') && t.paymentMethod === PaymentMethod.CASH).reduce((s,t)=>s+t.total, 0)).toFixed(2)}</span>
                           </div>
                        </div>
                     </div>
@@ -718,7 +720,7 @@ export default function App() {
                     ) : (
                        sessions
                         .filter(s => s.status === 'CLOSED')
-                        .sort((a,b) => b.endTime! - a.endTime!)
+                        .sort((a,b) => (b.endTime || 0) - (a.endTime || 0))
                         .map(session => (
                            <div key={session.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4 hover:shadow-md transition-all group">
                               <div className="flex justify-between items-start">
@@ -727,9 +729,9 @@ export default function App() {
                                        <Calendar size={20} />
                                     </div>
                                     <div>
-                                       <h4 className="font-black text-sm text-slate-900">{new Date(session.endTime!).toLocaleDateString('nl-NL')}</h4>
+                                       <h4 className="font-black text-sm text-slate-900">{new Date(session.endTime || Date.now()).toLocaleDateString('nl-NL')}</h4>
                                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                                          {new Date(session.startTime).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})} - {new Date(session.endTime!).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}
+                                          {new Date(session.startTime).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})} - {new Date(session.endTime || Date.now()).toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}
                                        </p>
                                     </div>
                                  </div>
@@ -743,19 +745,19 @@ export default function App() {
                               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-50">
                                  <div className="bg-slate-50/50 p-3 rounded-xl flex flex-col border border-slate-100">
                                     <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Totaal</span>
-                                    <span className="font-bold text-xs text-slate-900 font-mono">€{session.summary?.totalSales.toFixed(2)}</span>
+                                    <span className="font-bold text-xs text-slate-900 font-mono">€{(session.summary?.totalSales || 0).toFixed(2)}</span>
                                  </div>
                                  <div className="bg-slate-50/50 p-3 rounded-xl flex flex-col border border-slate-100">
                                     <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Cash</span>
-                                    <span className="font-bold text-xs text-slate-900 font-mono">€{session.summary?.cashTotal.toFixed(2)}</span>
+                                    <span className="font-bold text-xs text-slate-900 font-mono">€{(session.summary?.cashTotal || 0).toFixed(2)}</span>
                                  </div>
                                  <div className="bg-slate-50/50 p-3 rounded-xl flex flex-col border border-slate-100">
                                     <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Kaart</span>
-                                    <span className="font-bold text-xs text-slate-900 font-mono">€{session.summary?.cardTotal.toFixed(2)}</span>
+                                    <span className="font-bold text-xs text-slate-900 font-mono">€{(session.summary?.cardTotal || 0).toFixed(2)}</span>
                                  </div>
                                  <div className="bg-slate-50/50 p-3 rounded-xl flex flex-col border border-slate-100">
                                     <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Tickets</span>
-                                    <span className="font-bold text-xs text-slate-900 font-mono">{session.summary?.transactionCount}</span>
+                                    <span className="font-bold text-xs text-slate-900 font-mono">{session.summary?.transactionCount || 0}</span>
                                  </div>
                               </div>
                            </div>
@@ -1205,15 +1207,15 @@ export default function App() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400 font-medium">Totale Omzet</span>
-                      <span className="font-black">€{previewSession.summary?.totalSales.toFixed(2)}</span>
+                      <span className="font-black">€{(previewSession.summary?.totalSales || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">Via Kaart</span>
-                      <span className="font-bold">€{previewSession.summary?.cardTotal.toFixed(2)}</span>
+                      <span className="font-bold">€{(previewSession.summary?.cardTotal || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">Via Contant</span>
-                      <span className="font-bold">€{previewSession.summary?.cashTotal.toFixed(2)}</span>
+                      <span className="font-bold">€{(previewSession.summary?.cashTotal || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1223,15 +1225,15 @@ export default function App() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">Beginsaldo</span>
-                      <span className="font-bold">€{previewSession.startCash.toFixed(2)}</span>
+                      <span className="font-bold">€{(previewSession.startCash || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">Verwacht in Kas</span>
-                      <span className="font-bold">€{previewSession.expectedCash?.toFixed(2) || '0,00'}</span>
+                      <span className="font-bold">€{(previewSession.expectedCash || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400 font-medium">Geteld Saldo</span>
-                      <span className="font-black">€{previewSession.endCash?.toFixed(2) || '0,00'}</span>
+                      <span className="font-black">€{(previewSession.endCash || 0).toFixed(2)}</span>
                     </div>
                     <div className={`flex justify-between text-sm font-black p-3 rounded-xl ${((previewSession.endCash || 0) - (previewSession.expectedCash || 0)) < 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
                       <span>Verschil</span>
@@ -1245,11 +1247,11 @@ export default function App() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">BTW 0%</span>
-                      <span className="font-bold font-mono">€{previewSession.summary?.vat0Total.toFixed(2)}</span>
+                      <span className="font-bold font-mono">€{(previewSession.summary?.vat0Total || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">BTW Hoog ({activeMode === 'SHOP' ? '21,5' : '21'}%)</span>
-                      <span className="font-bold font-mono">€{previewSession.summary?.vatHighTotal.toFixed(2)}</span>
+                      <span className="font-bold font-mono">€{(previewSession.summary?.vatHighTotal || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1261,9 +1263,9 @@ export default function App() {
                       <div key={item.name} className="flex justify-between items-center group">
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-slate-900">{item.name}</span>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{item.qty} verkocht</span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{(item.qty || 0)} verkocht</span>
                         </div>
-                        <span className="text-xs font-black font-mono">€{item.total.toFixed(2)}</span>
+                        <span className="text-xs font-black font-mono">€{(item.total || 0).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
