@@ -8,7 +8,7 @@ export interface Product {
   id: string;
   name: string;
   price: number;
-  vatRate: number; // Changed from 0 | 21 to number to support 21.5
+  vatRate: number; 
   color?: string;
   stock?: number;
   updatedAt: number;
@@ -26,19 +26,10 @@ export interface Transaction {
   items: CartItem[];
   subtotal: number;
   vat0: number;
-  vatHigh: number; // Renamed from vat21 to vatHigh for clarity with 21.5%
+  vatHigh: number; 
   total: number;
   paymentMethod: PaymentMethod;
-  updatedAt: number;
-}
-
-export interface CashEntry {
-  id: string;
-  sessionId: string;
-  timestamp: number;
-  type: 'IN' | 'OUT';
-  amount: number;
-  reason: string;
+  salesmanName?: string; // Tracks who made the sale
   updatedAt: number;
 }
 
@@ -74,7 +65,14 @@ export interface DailySummary {
   cashTotal: number;
   cardTotal: number;
   vat0Total: number;
-  vatHighTotal: number; // Updated naming
+  vatHighTotal: number;
   firstTicketId?: string;
   lastTicketId?: string;
+}
+
+export interface CloudConfig {
+  syncId: string;
+  lastSync?: number;
+  isAutoSync: boolean;
+  endpoint?: string;
 }

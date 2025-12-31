@@ -154,9 +154,9 @@ export class BluetoothPrinterService {
     ];
 
     (transaction.items || []).forEach(item => {
-      const lineTotal = (item.price * item.quantity).toFixed(2).replace('.', ',');
-      const itemDescription = `${item.quantity}x ${item.name || 'Onbekend'}`;
-      const unitPriceStr = `(${item.price.toFixed(2).replace('.', ',')} / st)`;
+      const lineTotal = ((item.price || 0) * (item.quantity || 0)).toFixed(2).replace('.', ',');
+      const itemDescription = `${item.quantity || 0}x ${item.name || 'Onbekend'}`;
+      const unitPriceStr = `(${(item.price || 0).toFixed(2).replace('.', ',')} / st)`;
       
       cmds.push(this.formatLine(itemDescription, lineTotal));
       cmds.push(LEFT, `  ${unitPriceStr}\n`);
@@ -164,15 +164,14 @@ export class BluetoothPrinterService {
 
     cmds.push('--------------------------------\n');
     const totalLabel = "TOTAAL:";
-    const totalValue = `EUR ${transaction.total.toFixed(2).replace('.', ',')}`;
+    const totalValue = `EUR ${(transaction.total || 0).toFixed(2).replace('.', ',')}`;
     cmds.push(BOLD_ON, this.formatLine(totalLabel, totalValue), BOLD_OFF);
     cmds.push(`Betaald via: ${transaction.paymentMethod === 'CASH' ? 'CONTANT' : 'KAART'}\n`);
     cmds.push('--------------------------------\n');
     
-    // Fix: replaced transaction.vat21 with transaction.vatHigh to match Transaction interface
-    if (transaction.vatHigh > 0) {
+    if ((transaction.vatHigh || 0) > 0) {
       const vatLabel = "BTW Hoog";
-      const vatValue = transaction.vatHigh.toFixed(2).replace('.', ',');
+      const vatValue = (transaction.vatHigh || 0).toFixed(2).replace('.', ',');
       cmds.push(this.formatLine(vatLabel, vatValue));
     }
 
@@ -203,7 +202,7 @@ export class BluetoothPrinterService {
     const firstId = String(firstIdRaw || 'N/A');
     const lastId = String(lastIdRaw || 'N/A');
 
-    const formatCurrency = (val: number = 0) => `EUR ${val.toFixed(2).replace('.', ',')}`;
+    const formatCurrency = (val: any) => `EUR ${(val || 0).toFixed(2).replace('.', ',')}`;
 
     const cmds: (string | Uint8Array | undefined)[] = [
       INIT, '\n', CENTER, BOLD_ON, "SESSIE RAPPORT\n", BOLD_OFF,
@@ -227,7 +226,6 @@ export class BluetoothPrinterService {
       '--------------------------------\n',
       BOLD_ON, "BTW OVERZICHT:\n", BOLD_OFF,
       this.formatLine("BTW 0% Basis:", formatCurrency(summary?.vat0Total)),
-      // Fix: replaced summary.vat21Total with summary.vatHighTotal to match DailySummary interface
       this.formatLine("BTW Hoog Basis:", formatCurrency((summary?.totalSales || 0) - (summary?.vatHighTotal || 0) - (summary?.vat0Total || 0))),
       this.formatLine("BTW Hoog Totaal:", formatCurrency(summary?.vatHighTotal)),
       '--------------------------------\n',
@@ -236,13 +234,13 @@ export class BluetoothPrinterService {
 
     const items = Object.values(productBreakdown).sort((a, b) => {
        if (a.name !== b.name) return a.name.localeCompare(b.name);
-       return b.price - a.price;
+       return (b.price || 0) - (a.price || 0);
     });
 
     items.forEach(item => {
-      const priceSuffix = item.price < 0 ? " (Ret)" : "";
+      const priceSuffix = (item.price || 0) < 0 ? " (Ret)" : "";
       const label = `${item.name}${priceSuffix}`.substring(0, 24);
-      const qtyStr = `${item.qty}x`;
+      const qtyStr = `${item.qty || 0}x`;
       cmds.push(this.formatLine(label, qtyStr));
     });
 
