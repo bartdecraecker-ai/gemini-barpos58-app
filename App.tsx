@@ -7,14 +7,14 @@ import {
   BluetoothConnected, LogOut, RefreshCcw, Package, Globe, MessageSquare, 
   Clock, Save, HelpCircle, Sparkles, FileText, Eye, Wifi, WifiOff, Layers, Building2, Users, Info, ShieldCheck, Database
 } from 'lucide-react';
-import { Product, CartItem, Transaction, PaymentMethod, CompanyDetails, SalesSession, DailySummary, CloudConfig } from './types';
-import { DEFAULT_COMPANY, INITIAL_PRODUCTS, AVAILABLE_COLORS } from './constants';
-import { Receipt } from './components/Receipt';
-import { apiService, AppMode } from './services/api';
-import { btPrinterService } from './services/bluetoothPrinter';
-import { generateDailyInsight } from './services/geminiService';
+import { Product, CartItem, Transaction, PaymentMethod, CompanyDetails, SalesSession, DailySummary, CloudConfig } from './types.ts';
+import { DEFAULT_COMPANY, INITIAL_PRODUCTS, AVAILABLE_COLORS } from './constants.ts';
+import { Receipt } from './components/Receipt.tsx';
+import { apiService, AppMode } from './services/api.ts';
+import { btPrinterService } from './services/bluetoothPrinter.ts';
+import { generateDailyInsight } from './services/geminiService.ts';
 
-const APP_VERSION = "1.0.0-PROD";
+const APP_VERSION = "1.0.1-PROD";
 
 export default function App() {
   // Authentication & Mode State
