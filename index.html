@@ -5,15 +5,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>BarPOS Cloud - Premium Edition</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Shim for process.env to prevent runtime errors in the browser
-      window.process = {
-        env: {
-          API_KEY: "" // Will be populated by the environment if available
-        }
-      };
+      // Define process and global for library compatibility
+      window.process = { env: { API_KEY: "" } };
+      window.global = window;
     </script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
       
@@ -28,19 +25,10 @@
         font-family: 'JetBrains Mono', monospace;
       }
 
-      /* Custom Professional Scrollbar */
       .custom-scrollbar::-webkit-scrollbar { width: 4px; }
       .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
       
-      /* Glassmorphism utility */
-      .glass {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-      }
-
-      /* Print Styles for 58mm Paper */
       @media print {
         @page { margin: 0; size: 58mm auto; }
         body * { visibility: hidden; }
@@ -51,10 +39,8 @@
           font-family: 'JetBrains Mono', monospace; font-size: 11px;
           line-height: 1.2;
         }
-        .no-print { display: none !important; }
       }
 
-      /* Enhanced Animations */
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       @keyframes zoomIn95 { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
       @keyframes slideUp { from { transform: translateY(1.5rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -71,29 +57,26 @@
       .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
       
       button:active { transform: scale(0.96); }
-      .tap-highlight:active { background-color: rgba(0,0,0,0.05); }
-
-      /* Custom shadow for POS buttons */
       .pos-shadow {
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
       }
     </style>
     <script type="importmap">
-    {
-      "imports": {
-        "react/": "https://aistudiocdn.com/react@^19.2.0/",
-        "react": "https://aistudiocdn.com/react@^19.2.0",
-        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-        "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-        "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1/dist/jspdf.es.min.js"
-      }
-    }
-    </script>
-    <script type="module" src="index.tsx"></script>
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.463.0",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="index.tsx"></script>
   </body>
 </html>
