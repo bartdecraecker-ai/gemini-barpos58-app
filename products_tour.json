@@ -1,6 +1,6 @@
 
 [
-  { "id": "T1", "name": "Tour Pintje (Blik)", "price": 4.00, "vatRate": 21, "color": "bg-indigo-200", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "T1", "name": "Tour Krauker 33 cl", "price": 4.00, "vatRate": 21, "color": "bg-indigo-200", "stock": 100, "updatedAt": 1715424000000 },
   { "id": "T2", "name": "Tour Wijn (Fles)", "price": 22.00, "vatRate": 21, "color": "bg-rose-200", "stock": 20, "updatedAt": 1715424000000 },
   { "id": "T3", "name": "Tour T-Shirt", "price": 25.00, "vatRate": 21, "color": "bg-slate-300", "stock": 50, "updatedAt": 1715424000000 },
   { "id": "T4", "name": "Tour Hoody", "price": 45.00, "vatRate": 21, "color": "bg-slate-400", "stock": 20, "updatedAt": 1715424000000 },

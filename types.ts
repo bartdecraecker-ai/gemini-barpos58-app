@@ -1,7 +1,7 @@
 
 export enum PaymentMethod {
   CASH = 'CASH',
-  CARD = 'CARD',
+  CARD = 'CARD'
 }
 
 export interface Product {
@@ -29,7 +29,7 @@ export interface Transaction {
   vatHigh: number; 
   total: number;
   paymentMethod: PaymentMethod;
-  salesmanName?: string; // Tracks who made the sale
+  salesmanName?: string;
   updatedAt: number;
 }
 
@@ -66,6 +66,7 @@ export interface DailySummary {
   cardTotal: number;
   vat0Total: number;
   vatHighTotal: number;
+  productSales?: Record<string, number>;
   firstTicketId?: string;
   lastTicketId?: string;
 }
