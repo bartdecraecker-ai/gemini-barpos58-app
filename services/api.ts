@@ -64,15 +64,14 @@ export const apiService = {
     if (!mode) return null;
 
     try {
-      const prodFile = mode === 'TOUR' ? 'products_tour.json' : 'products_shop.json';
-      const compFile = mode === 'TOUR' ? 'company_tour.json' : 'company_shop.json';
+     const prodFile = mode === 'TOUR' ? '/data/products_tour.json' : '/data/products_shop.json';
+const compFile = mode === 'TOUR' ? '/data/company_tour.json' : '/data/company_shop.json';
 
-      console.debug(`[Debug] Fetching defaults from ${prodFile} and ${compFile}`);
-      
-      const [pResp, cResp] = await Promise.all([
-        fetch(prodFile),
-        fetch(compFile)
-      ]);
+const [pResp, cResp] = await Promise.all([
+  fetch(prodFile, { cache: 'no-store' }),
+  fetch(compFile, { cache: 'no-store' })
+]);
+
 
       if (pResp.ok && cResp.ok) {
         const products = await pResp.json();
