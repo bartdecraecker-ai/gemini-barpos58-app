@@ -1,0 +1,12 @@
+{
+  "name": "Kraukerbier - Shop",
+  "address": "Bremtstraat 70",
+  "address2": "B-9320 Nieuwerkerken",
+  "vatNumber": "BE1028.826.540",
+  "website": "www.kraukerbier.be",
+  "sellerName": "Beheerder",
+  "salesmen": ["Bart", "Tina"],
+  "footerMessage": "Bedankt voor uw bezoek aan de shop!",
+  "masterPassword": "1984",
+  "updatedAt": 1715424000000
+}
