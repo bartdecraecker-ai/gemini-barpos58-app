@@ -35,29 +35,32 @@ export const apiService = {
   },
   
   // Cloud Sync Logic (Simulated)
-  async pushToCloud(config: CloudConfig, products: Product[], company: CompanyDetails): Promise<boolean> {
-    if (!config.syncId) return false;
-    try {
-      const payload = { products, company, timestamp: Date.now() };
-      localStorage.setItem(`${CLOUD_STORAGE_KEY}${config.syncId}`, JSON.stringify(payload));
-      this.setCloudConfig({ ...config, lastSync: Date.now() });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  },
+ async pushToCloud(config: CloudConfig, products: Product[], company: CompanyDetails): Promise<boolean> {
+  const syncId = cleanSyncId(config.syncId);
+  if (!syncId) return false;
+  try {
+    const payload = { products, company, timestamp: Date.now() };
+    localStorage.setItem(`${CLOUD_STORAGE_KEY}${syncId}`, JSON.stringify(payload));
+    this.setCloudConfig({ ...config, syncId, lastSync: Date.now() });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  async pullFromCloud(config: CloudConfig): Promise<{products: Product[], company: CompanyDetails} | null> {
-    if (!config.syncId) return null;
-    try {
-      const raw = localStorage.getItem(`${CLOUD_STORAGE_KEY}${config.syncId}`);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      return { products: data.products, company: data.company };
-    } catch (e) {
-      return null;
-    }
-  },
+async pullFromCloud(config: CloudConfig): Promise<{products: Product[], company: CompanyDetails} | null> {
+  const syncId = cleanSyncId(config.syncId);
+  if (!syncId) return null;
+  try {
+    const raw = localStorage.getItem(`${CLOUD_STORAGE_KEY}${syncId}`);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return { products: data.products, company: data.company };
+  } catch {
+    return null;
+  }
+},
+
 
   async resetToDefaults(): Promise<{products: Product[], company: CompanyDetails} | null> {
     const mode = this.getActiveMode();
