@@ -3,6 +3,6 @@
   { "id": "S1", "name": "Krauker Anijs 33 cl", "price": 2.40, "vatRate": 0, "color": "bg-amber-200", "stock": 150, "updatedAt": 1715424000000 },
   { "id": "S2", "name": "Krauker Anijs 6-pack", "price": 14.00, "vatRate": 0, "color": "bg-amber-200", "stock": 80, "updatedAt": 1715424000000 },
   { "id": "S3", "name": "Krauker Anijs 24 pack", "price": 56.00, "vatRate": 0, "color": "bg-amber-200", "stock": 40, "updatedAt": 1715424000000 },
-  { "id": "S4", "name": "Krauker glas", "price": 5.00, "vatRate": 21, "color": "bg-blue-100", "stock": 100, "updatedAt": 1715424000000 },
+  { "id": "S4", "name": "Krauker glas", "price": 5.00, "vatRate": 0, "color": "bg-blue-100", "stock": 100, "updatedAt": 1715424000000 },
   { "id": "S5", "name": "Krauker Anijs proefpack", "price": 12.00, "vatRate": 0, "color": "bg-cyan-100", "stock": 120, "updatedAt": 1715424000000 },
 ]
