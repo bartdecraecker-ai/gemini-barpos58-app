@@ -6,7 +6,7 @@
   "website": "www.kraukerbier.be",
   "sellerName": "Beheerder",
   "salesmen": ["Bart", "Tina"],
-  "footerMessage": "Bedankt voor uw bezoek aan de shop!",
+  "footerMessage": "Bedankt voor uw bezoek shop!",
   "masterPassword": "1984",
   "updatedAt": 1715424000000
 }
