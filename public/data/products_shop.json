@@ -1,40 +1,7 @@
 [
-  {
-    "id": "S1", "name": "Krauker  Anijs 33 cl", "price": 2.4, "vatRate": 0, "color": "bg-amber-100", "stock": 150, "updatedAt": 1767363592578},
-  {
-    "id": "S2",
-    "name": "Krauker Anijs 6-pack",
-    "price": 14,
-    "vatRate": 0,
-    "color": "bg-amber-100",
-    "stock": 80,
-    "updatedAt": 1767363587168
-  },
-  {
-    "id": "S3",
-    "name": "Krauker Anijs 24-pack",
-    "price": 56,
-    "vatRate": 0,
-    "color": "bg-amber-100",
-    "stock": 40,
-    "updatedAt": 1767363579489
-  },
-  {
-    "id": "S4",
-    "name": "Krauker glas",
-    "price": 5,
-    "vatRate": 0,
-    "color": "bg-blue-100",
-    "stock": 100,
-    "updatedAt": 1767363544647
-  },
-  {
-    "id": "S5",
-    "name": "Water Bruis",
-    "price": 2.8,
-    "vatRate": 21,
-    "color": "bg-cyan-100",
-    "stock": 120,
-    "updatedAt": 1715424000000
-  }
+  { "id": "S1", "name": "Krauker  Anijs 33 cl", "price": 2.4, "vatRate": 0, "color": "bg-amber-100", "stock": 150, "updatedAt": 1767363592578 },
+  { "id": "S2", "name": "Krauker Anijs 6-pack", "price": 14, "vatRate": 0, "color": "bg-amber-100", "stock": 80, "updatedAt": 1767363587168 },
+  { "id": "S3", "name": "Krauker Anijs 24-pack", "price": 56, "vatRate": 0, "color": "bg-amber-100", "stock": 40, "updatedAt": 1767363579489 },
+  { "id": "S4", "name": "Krauker glas", "price": 5, "vatRate": 0, "color": "bg-blue-100", "stock": 100, "updatedAt": 1767363544647 },
+  { "id": "S5", "name": "Water Bruis", "price": 2.8, "vatRate": 0, "color": "bg-cyan-100", "stock": 120, "updatedAt": 1715424000000 }
 ]
