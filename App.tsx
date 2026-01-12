@@ -232,9 +232,33 @@ export default function App() {
     else finalizePayment(PaymentMethod.CASH);
   };
 
-  const finalizePayment = async (method: PaymentMethod) => {
-    setIsPendingCardConfirmation(false);
-    const now = Date.now();
+// ✅ Stock verlagen op basis van verkochte items
+const applyStockReduction = (items: CartItem[]) => {
+  setProducts(prev =>
+    prev.map(p => {
+      const soldQty = items
+        .filter(i => i.id === p.id)
+        .reduce((sum, i) => sum + (i.quantity || 0), 0);
+
+      if (soldQty <= 0) return p;
+
+      const currentStock = Number.isFinite(p.stock as any) ? (p.stock as number) : 0;
+      return {
+        ...p,
+        stock: Math.max(0, currentStock - soldQty),
+        updatedAt: Date.now()
+      };
+    })
+  );
+};
+  
+const finalizePayment = async (method: PaymentMethod) => {
+  setIsPendingCardConfirmation(false);
+
+  // ✅ nieuw: voorraad verlagen op basis van huidige cart
+  applyStockReduction(cart);
+
+  const now = Date.now();
 
     const tx: Transaction = {
       id: `TX-${now}`,
