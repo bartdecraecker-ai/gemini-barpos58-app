@@ -509,34 +509,31 @@ setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
                       className="w-full bg-slate-50 border-2 p-5 rounded-3xl font-bold text-3xl outline-none focus:border-indigo-400 transition-all text-center"
                     />
                   </div>
-                  <button
-<button onClick={() => {
-  const sess = {
-    id: `SES-${Date.now()}`,
-    startTime: Date.now(),
-    startCash: parseFloat(startFloatAmount)||0,
-    status: 'OPEN' as const,
-    updatedAt: Date.now()
-  };
+<button
+  onClick={() => {
+    const sess = {
+      id: `SES-${Date.now()}`,
+      startTime: Date.now(),
+      startCash: parseFloat(startFloatAmount) || 0,
+      status: 'OPEN' as const,
+      updatedAt: Date.now()
+    };
 
-  setCurrentSession(sess);
-  setSessions(prev => [sess, ...prev]);
+    setCurrentSession(sess);
+    setSessions(prev => [sess, ...prev]);
 
-  // ✅ 2B – push OPEN session
-  try {
-    apiService.serverPushSession(sess as any);
-  } catch (e) {
-    console.warn("Server session OPEN sync failed", e);
-  }
+    // ✅ 2B – push OPEN session
+    try {
+      apiService.serverPushSession(sess as any);
+    } catch (e) {
+      console.warn("Server session OPEN sync failed", e);
+    }
+  }}
+  className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all font-bold"
+>
+  Start Shift
+</button>
 
-
-                    }}
-                    className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all font-bold"
-                  >
-                    Start Shift
-                    
-                  </button>
-                </div>
               </div>
             ) : (
               <>
