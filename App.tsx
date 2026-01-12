@@ -254,6 +254,11 @@ const applyStockReduction = (items: CartItem[]) => {
   
 const finalizePayment = async (method: PaymentMethod) => {
   setIsPendingCardConfirmation(false);
+try {
+  await apiService.serverPushSale(tx);
+} catch (e) {
+  console.warn("Server sale sync failed", e);
+}
 
   // ✅ nieuw: voorraad verlagen op basis van huidige cart
   applyStockReduction(cart);
@@ -320,7 +325,14 @@ const finalizePayment = async (method: PaymentMethod) => {
       summary,
       updatedAt: Date.now()
     };
+// ✅ 2B – push CLOSED session
+try {
+  apiService.serverPushSession(closed as any);
+} catch (e) {
+  console.warn("Server session CLOSE sync failed", e);
+}
 
+setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
     setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
     if (btConnected) btPrinterService.printSessionReport(closed, sessionTx, company);
 
@@ -498,14 +510,31 @@ const finalizePayment = async (method: PaymentMethod) => {
                     />
                   </div>
                   <button
-                    onClick={() => {
-                      const sess = { id: `SES-${Date.now()}`, startTime: Date.now(), startCash: parseFloat(startFloatAmount) || 0, status: 'OPEN' as const, updatedAt: Date.now() };
-                      setCurrentSession(sess);
-                      setSessions(prev => [sess, ...prev]);
+<button onClick={() => {
+  const sess = {
+    id: `SES-${Date.now()}`,
+    startTime: Date.now(),
+    startCash: parseFloat(startFloatAmount)||0,
+    status: 'OPEN' as const,
+    updatedAt: Date.now()
+  };
+
+  setCurrentSession(sess);
+  setSessions(prev => [sess, ...prev]);
+
+  // ✅ 2B – push OPEN session
+  try {
+    apiService.serverPushSession(sess as any);
+  } catch (e) {
+    console.warn("Server session OPEN sync failed", e);
+  }
+
+
                     }}
                     className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all font-bold"
                   >
                     Start Shift
+                    
                   </button>
                 </div>
               </div>
