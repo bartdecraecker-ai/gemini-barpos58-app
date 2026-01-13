@@ -325,52 +325,70 @@ const finalizePayment = async (method: PaymentMethod) => {
   }, 1000);
 };
 
+const closeSession = (counted: number) => {
+  if (!currentSession) return;
 
-  const closeSession = (counted: number) => {
-    if (!currentSession) return;
-    const sessionTx = transactions.filter(t => t.sessionId === currentSession.id);
+  const sessionTx = transactions.filter(t => t.sessionId === currentSession.id);
 
-    const totalSales = sessionTx.reduce((s, t) => s + t.total, 0);
-    const cashTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((s, t) => s + t.total, 0);
+  const totalSales = sessionTx.reduce((s, t) => s + (t.total || 0), 0);
+  const cashTotal  = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((s, t) => s + (t.total || 0), 0);
+  const cardTotal  = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((s, t) => s + (t.total || 0), 0);
 
-    const prodCounts: Record<string, number> = {};
-    sessionTx.forEach(t => t.items.forEach(i => { prodCounts[i.name] = (prodCounts[i.name] || 0) + i.quantity; }));
+  const prodCounts: Record<string, number> = {};
+  sessionTx.forEach(t => {
+    (t.items || []).forEach(i => {
+      const name = i?.name || 'Onbekend';
+      const qty = Number(i?.quantity || 0);
+      prodCounts[name] = (prodCounts[name] || 0) + qty;
+    });
+  });
 
-    const summary: DailySummary = {
-      totalSales,
-      transactionCount: sessionTx.length,
-      cashTotal,
-      cardTotal,
-      vat0Total: sessionTx.reduce((s, t) => s + t.vat0, 0),
-      vatHighTotal: sessionTx.reduce((s, t) => s + t.vatHigh, 0),
-      productSales: prodCounts
-    };
-
-    const closed: SalesSession = {
-      ...currentSession,
-      status: 'CLOSED',
-      endTime: Date.now(),
-      endCash: counted,
-      expectedCash: currentSession.startCash + cashTotal,
-      summary,
-      updatedAt: Date.now()
-    };
-// ✅ 2B – push CLOSED session
-try {
-  apiService.serverPushSession(closed as any);
-} catch (e) {
-  console.warn("Server session CLOSE sync failed", e);
-}
-
-setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
-    setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
-    if (btConnected) btPrinterService.printSessionReport(closed, sessionTx, company);
-
-    setPreviewSession(closed);
-    setCurrentSession(null);
-    setIsClosingSession(false);
-    setActiveTab('REPORTS');
+  const summary: DailySummary = {
+    totalSales,
+    transactionCount: sessionTx.length,
+    cashTotal,
+    cardTotal,
+    vat0Total: sessionTx.reduce((s, t) => s + (t.vat0 || 0), 0),
+    vatHighTotal: sessionTx.reduce((s, t) => s + (t.vatHigh || 0), 0),
+    productSales: prodCounts,
   };
+
+  const closed: SalesSession = {
+    ...currentSession,
+    status: 'CLOSED',
+    endTime: Date.now(),
+    endCash: counted,
+    expectedCash: (currentSession.startCash || 0) + cashTotal,
+    summary,
+    updatedAt: Date.now(),
+  };
+
+  // ✅ 1) Eerst state-updates (hier mag niets kunnen crashen)
+  setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
+  setPreviewSession(closed);
+  setCurrentSession(null);
+  setIsClosingSession(false);
+  setActiveTab('REPORTS');
+
+  // ✅ 2) Side-effects veilig (mag falen zonder UI te blokkeren)
+  (async () => {
+    try {
+      await apiService.serverPushSession(closed as any);
+    } catch (e) {
+      console.warn("Server session CLOSE sync failed", e);
+    }
+
+    if (btConnected) {
+      try {
+        await btPrinterService.printSessionReport(closed, sessionTx, company);
+      } catch (e) {
+        console.warn("BT session print failed", e);
+      }
+    }
+  })();
+};
+
+
 
   const addStaff = () => {
     if (!newStaffName) return;
