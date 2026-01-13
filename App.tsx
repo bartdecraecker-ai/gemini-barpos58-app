@@ -252,6 +252,18 @@ const applyStockReduction = (items: CartItem[]) => {
   );
 };
   
+const mergeByIdNewest = <T extends { id: string; updatedAt?: number }>(local: T[], incoming: T[]) => {
+  const map = new Map<string, T>();
+  for (const x of local) map.set(x.id, x);
+  for (const x of incoming) {
+    const prev = map.get(x.id);
+    const a = prev?.updatedAt || 0;
+    const b = x?.updatedAt || 0;
+    if (!prev || b >= a) map.set(x.id, x);
+  }
+  return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+};
+
 const finalizePayment = async (method: PaymentMethod) => {
   setIsPendingCardConfirmation(false);
 
@@ -264,26 +276,43 @@ const finalizePayment = async (method: PaymentMethod) => {
     items: [...cart],
     subtotal: totals.sub,
     vat0: totals.v0,
-    vatHigh: totals.vHigh,
+    vatHigh: totals.vatHigh,
     total: totals.total,
     paymentMethod: method,
     salesmanName: company.sellerName,
     updatedAt: now
   };
 
-  // ✅ voorraad lokaal verlagen
+  // ✅ Optimistic: direct stock lokaal verlagen (snappy UI)
   applyStockReduction(cart);
 
-  // ✅ server sale sync
-  try {
-    await apiService.serverPushSale(tx);
-  } catch (e) {
-    console.warn("Server sale sync failed", e);
-  }
-
+  // ✅ Locals meteen bijwerken
   setTransactions(prev => [tx, ...prev]);
   setCart([]);
   setShowSuccess(true);
+
+  // ✅ Server: sale push + daarna delta pull (authoritative stock!)
+  try {
+    await apiService.serverPushSale(tx);
+
+    const delta = await apiService.serverPullDelta();
+
+    if (delta?.products?.length) {
+      setProducts(prev => mergeByIdNewest(prev, delta.products).slice(0, 10));
+    }
+    if (delta?.transactions?.length) {
+      setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
+    }
+    if (delta?.sessions?.length) {
+      setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
+    }
+    if (delta?.company) {
+      setCompany(delta.company as any);
+    }
+  } catch (e) {
+    console.warn("Server sale sync/pull failed", e);
+    // Optional: je kan hier syncStatus = ERROR zetten indien je wil
+  }
 
   if (btConnected) {
     try { await btPrinterService.printReceipt(tx, company); }
@@ -295,6 +324,7 @@ const finalizePayment = async (method: PaymentMethod) => {
     setPreviewTransaction(tx);
   }, 1000);
 };
+
 
   const closeSession = (counted: number) => {
     if (!currentSession) return;
