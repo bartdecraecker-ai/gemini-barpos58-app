@@ -254,46 +254,47 @@ const applyStockReduction = (items: CartItem[]) => {
   
 const finalizePayment = async (method: PaymentMethod) => {
   setIsPendingCardConfirmation(false);
-try {
-  await apiService.serverPushSale(tx);
-} catch (e) {
-  console.warn("Server sale sync failed", e);
-}
-
-  // ✅ nieuw: voorraad verlagen op basis van huidige cart
-  applyStockReduction(cart);
 
   const now = Date.now();
-
-    const tx: Transaction = {
-      id: `TX-${now}`,
-      sessionId: currentSession!.id,
-      timestamp: now,
-      dateStr: new Date(now).toLocaleDateString('nl-NL'),
-      items: [...cart],
-      subtotal: totals.sub,
-      vat0: totals.v0,
-      vatHigh: totals.vHigh,
-      total: totals.total,
-      paymentMethod: method,
-      salesmanName: company.sellerName,
-      updatedAt: now
-    };
-
-    setTransactions(prev => [tx, ...prev]);
-    setCart([]);
-    setShowSuccess(true);
-
-    if (btConnected) {
-      try { await btPrinterService.printReceipt(tx, company); }
-      catch (e) { console.warn("BT Print error", e); }
-    }
-
-    setTimeout(() => {
-      setShowSuccess(false);
-      setPreviewTransaction(tx);
-    }, 1000);
+  const tx: Transaction = {
+    id: `TX-${now}`,
+    sessionId: currentSession!.id,
+    timestamp: now,
+    dateStr: new Date(now).toLocaleDateString('nl-NL'),
+    items: [...cart],
+    subtotal: totals.sub,
+    vat0: totals.v0,
+    vatHigh: totals.vHigh,
+    total: totals.total,
+    paymentMethod: method,
+    salesmanName: company.sellerName,
+    updatedAt: now
   };
+
+  // ✅ voorraad lokaal verlagen
+  applyStockReduction(cart);
+
+  // ✅ server sale sync
+  try {
+    await apiService.serverPushSale(tx);
+  } catch (e) {
+    console.warn("Server sale sync failed", e);
+  }
+
+  setTransactions(prev => [tx, ...prev]);
+  setCart([]);
+  setShowSuccess(true);
+
+  if (btConnected) {
+    try { await btPrinterService.printReceipt(tx, company); }
+    catch (e) { console.warn("BT Print error", e); }
+  }
+
+  setTimeout(() => {
+    setShowSuccess(false);
+    setPreviewTransaction(tx);
+  }, 1000);
+};
 
   const closeSession = (counted: number) => {
     if (!currentSession) return;
@@ -301,7 +302,6 @@ try {
 
     const totalSales = sessionTx.reduce((s, t) => s + t.total, 0);
     const cashTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((s, t) => s + t.total, 0);
-    const cardTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((s, t) => s + t.total, 0);
 
     const prodCounts: Record<string, number> = {};
     sessionTx.forEach(t => t.items.forEach(i => { prodCounts[i.name] = (prodCounts[i.name] || 0) + i.quantity; }));
@@ -508,7 +508,8 @@ setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
                       onChange={e => setStartFloatAmount(e.target.value)}
                       className="w-full bg-slate-50 border-2 p-5 rounded-3xl font-bold text-3xl outline-none focus:border-indigo-400 transition-all text-center"
                     />
-                  </div>
+                  </div>   {/* ✅ sluit bg-white */}
+</div>   {/* ✅ sluit flex-1 wrapper */}
 <button
   onClick={() => {
     const sess = {
