@@ -1,7 +1,7 @@
 
 [
   { "id": "T1", "name": "Tour Krauker 33 cl", "price": 24.00, "vatRate": 0, "color": "bg-indigo-200", "stock": 100, "updatedAt": 1715424000000 },
-  { "id": "T2", "name": "Tour Wijn (Rood)", "price": 4.00, "vatRate": 0, "color": "bg-rose-200", "stock": 20, "updatedAt": 1715424000000 },
+  { "id": "T2", "name": "Tour Wijn (Rood)", "price": 14.00, "vatRate": 0, "color": "bg-rose-200", "stock": 20, "updatedAt": 1715424000000 },
   { "id": "T3", "name": "Tour Wijn (Wit)", "price": 4.00, "vatRate": 0, "color": "bg-slate-300", "stock": 50, "updatedAt": 1715424000000 },
   { "id": "T4", "name": "Tour Stella Artois", "price": 3.50, "vatRate": 0, "color": "bg-slate-400", "stock": 20, "updatedAt": 1715424000000 },
   { "id": "T5", "name": "Frisdrank Blik", "price": 2.50, "vatRate": 0, "color": "bg-sky-200", "stock": 100, "updatedAt": 1715424000000 },
