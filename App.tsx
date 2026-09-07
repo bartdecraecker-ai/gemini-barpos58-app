@@ -182,7 +182,7 @@ export default function App() {
       await btPrinterService.disconnect();
     } catch (e) {
       console.warn("BT disconnect error", e);
-    } fontinally {
+    } finally {
       setBtConnected(false);
     }
   };
