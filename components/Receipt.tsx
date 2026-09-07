@@ -30,9 +30,15 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, session, company 
       {/* TICKET DETAILS */}
       {transaction && (
         <>
-          <div className="flex justify-between text-[10px] text-slate-500">
-            <span>Datum: {transaction.dateStr}</span>
-            <span>Bediende: {transaction.salesmanName || 'Kassa'}</span>
+          <div className="space-y-0.5 text-[10px] text-slate-500">
+            <div className="flex justify-between font-bold text-slate-700">
+              <span>Ref: #{transaction.id}</span>
+              <span>{transaction.timeStr || ''}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Datum: {transaction.dateStr}</span>
+              <span>Bediende: {transaction.salesmanName || 'Kassa'}</span>
+            </div>
           </div>
 
           <div className="border-b border-dashed border-slate-200 my-2" />
