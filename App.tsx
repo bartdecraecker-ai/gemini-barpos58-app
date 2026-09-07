@@ -12,14 +12,15 @@ import {
   Settings,
   Users,
   RefreshCw,
-  LogOut,
   Banknote,
   Lock,
   Compass,
   Store,
   MapPin,
   Calendar,
-  ArrowLeft
+  ArrowLeft,
+  Printer,
+  RotateCcw
 } from 'lucide-react';
 
 // ==========================================
@@ -69,7 +70,7 @@ export interface Session {
 }
 
 // ==========================================
-// RECEIPT COMPONENT
+// RECEIPT COMPONENT (Donker / Startscherm Stijl)
 // ==========================================
 
 const Receipt = ({ 
@@ -81,42 +82,48 @@ const Receipt = ({
   transaction?: Transaction | null; 
   session?: Session | null 
 }) => (
-  <div className="p-4 bg-white rounded-lg text-slate-800 font-mono text-xs space-y-2 border border-slate-200">
-    <div className="text-center font-bold text-sm uppercase tracking-wide">{company.name}</div>
-    <div className="text-center text-[10px] text-slate-500">Bediend door: {company.sellerName}</div>
-    <hr className="my-2 border-dashed border-slate-300" />
+  <div className="p-6 bg-slate-900 rounded-3xl text-slate-200 font-mono text-xs space-y-4 border border-slate-700/80 shadow-2xl">
+    <div className="text-center">
+      <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-lg mx-auto mb-2">
+        K
+      </div>
+      <div className="font-black text-base text-white uppercase tracking-wider">{company.name}</div>
+      <div className="text-[11px] text-slate-400 mt-0.5">Bediend door: <span className="text-indigo-400 font-bold">{company.sellerName}</span></div>
+    </div>
+    
+    <hr className="border-slate-800" />
     
     {transaction && (
-      <div className="space-y-2">
-        <div className="space-y-1">
+      <div className="space-y-3">
+        <div className="space-y-2">
           {transaction.items.map((item, idx) => (
-            <div key={idx} className="flex justify-between text-[11px]">
-              <span>{item.quantity}x {item.product.name}</span>
-              <span>€{(item.product.price * item.quantity).toFixed(2)}</span>
+            <div key={idx} className="flex justify-between items-center text-xs">
+              <span className="text-slate-300"><span className="font-bold text-indigo-400">{item.quantity}x</span> {item.product.name}</span>
+              <span className="font-bold text-white">€{(item.product.price * item.quantity).toFixed(2)}</span>
             </div>
           ))}
         </div>
-        <hr className="my-1 border-dashed border-slate-200" />
-        <div className="flex justify-between font-bold text-sm pt-1">
+        <hr className="border-slate-800" />
+        <div className="flex justify-between font-black text-base text-white pt-1">
           <span>TOTAAL</span>
-          <span>€{transaction.total.toFixed(2)}</span>
+          <span className="text-indigo-400">€{transaction.total.toFixed(2)}</span>
         </div>
-        <div className="text-[10px] text-slate-500 text-right">
+        <div className="text-[10px] text-slate-400 text-right uppercase tracking-wider font-bold">
           Betaalmethode: {transaction.method === PaymentMethod.CARD ? 'Kaart' : 'Contant'}
         </div>
       </div>
     )}
 
     {session && (
-      <div className="space-y-1.5 pt-1">
-        <div className="font-bold border-b border-slate-200 pb-1 text-center uppercase tracking-wider text-[11px]">
+      <div className="space-y-2 pt-1">
+        <div className="font-bold border-b border-slate-800 pb-1.5 text-center uppercase tracking-wider text-xs text-amber-400">
           Shift Rapport ({session.id})
         </div>
-        <div className="flex justify-between"><span>Start contant:</span><span>€{session.startCash.toFixed(2)}</span></div>
+        <div className="flex justify-between text-slate-400"><span>Start contant:</span><span className="text-white font-bold">€{session.startCash.toFixed(2)}</span></div>
         {session.endCash !== undefined && (
-          <div className="flex justify-between"><span>Eind contant:</span><span>€{session.endCash.toFixed(2)}</span></div>
+          <div className="flex justify-between text-slate-400"><span>Eind contant:</span><span className="text-white font-bold">€{session.endCash.toFixed(2)}</span></div>
         )}
-        <div className="flex justify-between font-bold text-indigo-600 pt-1 border-t border-slate-100">
+        <div className="flex justify-between font-black text-sm text-indigo-400 pt-2 border-t border-slate-800">
           <span>Totale omzet:</span>
           <span>€{session.transactions.reduce((acc, t) => acc + t.total, 0).toFixed(2)}</span>
         </div>
@@ -130,25 +137,24 @@ const Receipt = ({
 // ==========================================
 
 export default function App() {
-  // App Mode State ('SELECT', 'SHOP', 'TOUR')
   const [appMode, setAppMode] = useState<'SELECT' | 'SHOP' | 'TOUR'>('SELECT');
   const [activeTab, setActiveTab] = useState<'POS' | 'HISTORY' | 'SETTINGS'>('POS');
   
-  // Password Protection State
+  // Wachtwoord Beheerder ingesteld op 1984
+  const ADMIN_PIN = '1984';
   const [pinInput, setPinInput] = useState('');
   const [isPinAuthenticated, setIsPinAuthenticated] = useState(false);
   const [pinError, setPinError] = useState(false);
-  const ADMIN_PIN = '1234'; // Wachtwoord / PIN voor instellingen
 
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Persistent LocalStorage State
+  // Vaste Beheerder = Bart
   const [company, setCompany] = useState<Company>(() => {
     const saved = localStorage.getItem('krauker_company');
     return saved ? JSON.parse(saved) : {
       name: 'Krauker Anijs',
-      sellerName: 'Beheerder',
-      salesmen: ['Beheerder', 'Medewerker 1']
+      sellerName: 'Bart',
+      salesmen: ['Bart', 'Medewerker']
     };
   });
 
@@ -174,13 +180,10 @@ export default function App() {
   const [newStaffName, setNewStaffName] = useState('');
   const [showSalesmanSelection, setShowSalesmanSelection] = useState(false);
   const [isPendingPayment, setIsPendingPayment] = useState<PaymentMethod | null>(null);
-  const [isClosingSession, setIsClosingSession] = useState(false);
-  const [endCashInput, setEndCashInput] = useState('');
   const [previewTransaction, setPreviewTransaction] = useState<Transaction | null>(null);
   const [previewSession, setPreviewSession] = useState<Session | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem('krauker_company', JSON.stringify(company));
   }, [company]);
@@ -222,7 +225,7 @@ export default function App() {
 
   const totalAmount = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
 
-  // PIN Authentication Check
+  // PIN Authentication
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (pinInput === ADMIN_PIN) {
@@ -235,7 +238,6 @@ export default function App() {
     }
   };
 
-  // Sync animation
   const triggerManualSync = () => {
     setIsSyncing(true);
     setTimeout(() => {
@@ -243,7 +245,7 @@ export default function App() {
     }, 800);
   };
 
-  // Payment
+  // Payment Finalization
   const finalizePayment = (method: PaymentMethod) => {
     if (cart.length === 0) return;
 
@@ -271,8 +273,14 @@ export default function App() {
     setTimeout(() => setShowSuccess(false), 2500);
   };
 
+  // Close Receipt Modal & Reset for New Sale
+  const closeReceiptAndReset = () => {
+    setPreviewTransaction(null);
+    setPreviewSession(null);
+  };
+
   // ==========================================
-  // MODE 1: LAUNCHER / CHOICE SCREEN (SHOP vs TOUR)
+  // MODE 1: LAUNCHER / CHOICE SCREEN
   // ==========================================
   if (appMode === 'SELECT') {
     return (
@@ -364,7 +372,7 @@ export default function App() {
   }
 
   // ==========================================
-  // MODE 3: KRAUKER SHOP (KASSA / POS DASHBOARD)
+  // MODE 3: KRAUKER SHOP (POS DASHBOARD)
   // ==========================================
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
@@ -570,14 +578,14 @@ export default function App() {
           <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto space-y-8 w-full pb-24">
             <h1 className="text-3xl font-black tracking-tight text-slate-900">Instellingen</h1>
 
-            {/* PASSWORD / PIN LOCK SCREEN */}
+            {/* PASSWORD / PIN LOCK SCREEN (Code: 1984) */}
             {!isPinAuthenticated ? (
-              <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-sm max-w-md mx-auto text-center space-y-6">
-                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto">
+              <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl max-w-md mx-auto text-center space-y-6 text-white">
+                <div className="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto">
                   <Lock size={28} />
                 </div>
                 <div>
-                  <h2 className="font-black text-xl text-slate-900">Beheerder Toegang</h2>
+                  <h2 className="font-black text-xl text-white">Beheerder Toegang</h2>
                   <p className="text-slate-400 text-xs font-medium mt-1">Voer PIN in om instellingen te openen</p>
                 </div>
 
@@ -588,12 +596,12 @@ export default function App() {
                     placeholder="****"
                     value={pinInput}
                     onChange={e => setPinInput(e.target.value)}
-                    className="w-full text-center text-2xl tracking-widest font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-600"
+                    className="w-full text-center text-2xl tracking-widest font-mono p-3 bg-slate-800 border border-slate-700 rounded-xl text-white outline-none focus:border-indigo-500"
                   />
-                  {pinError && <p className="text-xs text-rose-500 font-bold">Onjuiste PIN. Probeer opnieuw.</p>}
+                  {pinError && <p className="text-xs text-rose-400 font-bold">Onjuiste PIN code (1984).</p>}
                   <button 
                     type="submit"
-                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-md hover:bg-indigo-700 transition-all"
+                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-md hover:bg-indigo-500 transition-all"
                   >
                     Ontgrendelen
                   </button>
@@ -742,28 +750,28 @@ export default function App() {
       {/* Payment Confirmation Modal */}
       {isPendingPayment && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl p-8 max-w-xs w-full space-y-6 text-center shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-8 max-w-xs w-full space-y-6 text-center shadow-2xl">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${
-              isPendingPayment === PaymentMethod.CARD ? 'bg-sky-100 text-sky-600' : 'bg-emerald-100 text-emerald-600'
+              isPendingPayment === PaymentMethod.CARD ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-400'
             }`}>
               {isPendingPayment === PaymentMethod.CARD ? <CreditCard size={32} /> : <Banknote size={32} />}
             </div>
             <div>
-              <h3 className="font-black text-xl text-slate-900">
+              <h3 className="font-black text-xl text-white">
                 {isPendingPayment === PaymentMethod.CARD ? 'Kaartbetaling' : 'Contant Ontvangen'}
               </h3>
-              <p className="text-slate-500 text-xs font-bold mt-1">Ontvang €{totalAmount.toFixed(2)}</p>
+              <p className="text-slate-400 text-xs font-bold mt-1">Ontvang €{totalAmount.toFixed(2)}</p>
             </div>
             <div className="space-y-3">
               <button 
                 onClick={() => finalizePayment(isPendingPayment)} 
-                className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-emerald-700 transition-all"
+                className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-emerald-500 transition-all"
               >
                 Bevestig Betaling
               </button>
               <button 
                 onClick={() => setIsPendingPayment(null)} 
-                className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold uppercase text-xs hover:bg-slate-200 transition-colors"
+                className="w-full bg-slate-800 text-slate-300 py-3 rounded-xl font-bold uppercase text-xs hover:bg-slate-700 transition-colors"
               >
                 Annuleren
               </button>
@@ -772,32 +780,33 @@ export default function App() {
         </div>
       )}
 
-      {/* Shift / Transaction Preview Modal */}
+      {/* Kassaticket Modal met "Afsluiten & Nieuwe Verkoop" Knop */}
       {(previewSession || previewTransaction) && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl flex flex-col">
-            <div className="flex justify-between items-center">
-              <h3 className="font-black text-base text-slate-900">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl flex flex-col">
+            <div className="flex justify-between items-center text-white">
+              <h3 className="font-black text-base">
                 {previewSession ? 'Shift Rapport' : 'Kassabon'}
               </h3>
               <button 
-                onClick={() => { setPreviewSession(null); setPreviewTransaction(null); }} 
-                className="text-slate-400 hover:text-slate-600"
+                onClick={closeReceiptAndReset} 
+                className="text-slate-400 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-2 bg-slate-50 rounded-2xl border border-slate-200">
-              <Receipt company={company} session={previewSession} transaction={previewTransaction} />
-            </div>
+            {/* Donkere Kassabon UI */}
+            <Receipt company={company} session={previewSession} transaction={previewTransaction} />
 
-            <button 
-              onClick={() => { setPreviewSession(null); setPreviewTransaction(null); }} 
-              className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-slate-800 transition-all"
-            >
-              Sluiten
-            </button>
+            <div className="space-y-2 pt-2">
+              <button 
+                onClick={closeReceiptAndReset} 
+                className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-indigo-500 transition-all flex items-center justify-center gap-2"
+              >
+                <RotateCcw size={16} /> Ticket Afsluiten & Nieuwe Verkoop
+              </button>
+            </div>
           </div>
         </div>
       )}
