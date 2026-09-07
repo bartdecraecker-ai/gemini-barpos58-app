@@ -25,7 +25,8 @@ import {
   Gift,
   Package,
   PlayCircle,
-  LogOut
+  LogOut,
+  Printer
 } from 'lucide-react';
 
 // ==========================================
@@ -85,7 +86,7 @@ const renderProductIcon = (iconName?: string) => {
 };
 
 // ==========================================
-// RECEIPT COMPONENT
+// RECEIPT COMPONENT (Inclusief Print Styling)
 // ==========================================
 
 const Receipt = ({ 
@@ -97,33 +98,42 @@ const Receipt = ({
   transaction?: Transaction | null; 
   session?: Session | null 
 }) => (
-  <div className="p-6 bg-slate-900 rounded-3xl text-slate-200 font-mono text-xs space-y-4 border border-slate-700/80 shadow-2xl">
+  <div id="printable-receipt" className="p-6 bg-slate-900 print:bg-white print:text-black rounded-3xl text-slate-200 font-mono text-xs space-y-4 border border-slate-700/80 print:border-none shadow-2xl print:shadow-none">
     <div className="text-center">
-      <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-lg mx-auto mb-2">
+      <div className="w-10 h-10 bg-indigo-600 print:bg-black rounded-2xl flex items-center justify-center text-white font-black text-lg mx-auto mb-2">
         K
       </div>
-      <div className="font-black text-base text-white uppercase tracking-wider">{company.name}</div>
-      <div className="text-[11px] text-slate-400 mt-0.5">Bediend door: <span className="text-indigo-400 font-bold">{company.sellerName}</span></div>
+      <div className="font-black text-base text-white print:text-black uppercase tracking-wider">{company.name}</div>
+      <div className="text-[11px] text-slate-400 print:text-gray-600 mt-0.5">
+        Bediend door: <span className="text-indigo-400 print:text-black font-bold">{company.sellerName}</span>
+      </div>
+      {transaction && (
+        <div className="text-[10px] text-slate-500 print:text-gray-500 mt-1">
+          {new Date(transaction.timestamp).toLocaleString('nl-BE')}
+        </div>
+      )}
     </div>
     
-    <hr className="border-slate-800" />
+    <hr className="border-slate-800 print:border-gray-300" />
     
     {transaction && (
       <div className="space-y-3">
         <div className="space-y-2">
           {transaction.items.map((item, idx) => (
             <div key={idx} className="flex justify-between items-center text-xs">
-              <span className="text-slate-300"><span className="font-bold text-indigo-400">{item.quantity}x</span> {item.product.name}</span>
-              <span className="font-bold text-white">€{(item.product.price * item.quantity).toFixed(2)}</span>
+              <span className="text-slate-300 print:text-black">
+                <span className="font-bold text-indigo-400 print:text-black">{item.quantity}x</span> {item.product.name}
+              </span>
+              <span className="font-bold text-white print:text-black">€{(item.product.price * item.quantity).toFixed(2)}</span>
             </div>
           ))}
         </div>
-        <hr className="border-slate-800" />
-        <div className="flex justify-between font-black text-base text-white pt-1">
+        <hr className="border-slate-800 print:border-gray-300" />
+        <div className="flex justify-between font-black text-base text-white print:text-black pt-1">
           <span>TOTAAL</span>
-          <span className="text-indigo-400">€{transaction.total.toFixed(2)}</span>
+          <span className="text-indigo-400 print:text-black">€{transaction.total.toFixed(2)}</span>
         </div>
-        <div className="text-[10px] text-slate-400 text-right uppercase tracking-wider font-bold">
+        <div className="text-[10px] text-slate-400 print:text-gray-600 text-right uppercase tracking-wider font-bold">
           Betaalmethode: {transaction.method === PaymentMethod.CARD ? 'Kaart' : 'Contant'}
         </div>
       </div>
@@ -131,14 +141,14 @@ const Receipt = ({
 
     {session && (
       <div className="space-y-2 pt-1">
-        <div className="font-bold border-b border-slate-800 pb-1.5 text-center uppercase tracking-wider text-xs text-amber-400">
+        <div className="font-bold border-b border-slate-800 print:border-gray-300 pb-1.5 text-center uppercase tracking-wider text-xs text-amber-400 print:text-black">
           Shift Rapport ({session.id})
         </div>
-        <div className="flex justify-between text-slate-400"><span>Start contant:</span><span className="text-white font-bold">€{session.startCash.toFixed(2)}</span></div>
+        <div className="flex justify-between text-slate-400 print:text-black"><span>Start contant:</span><span className="text-white print:text-black font-bold">€{session.startCash.toFixed(2)}</span></div>
         {session.endCash !== undefined && (
-          <div className="flex justify-between text-slate-400"><span>Eind contant:</span><span className="text-white font-bold">€{session.endCash.toFixed(2)}</span></div>
+          <div className="flex justify-between text-slate-400 print:text-black"><span>Eind contant:</span><span className="text-white print:text-black font-bold">€{session.endCash.toFixed(2)}</span></div>
         )}
-        <div className="flex justify-between font-black text-sm text-indigo-400 pt-2 border-t border-slate-800">
+        <div className="flex justify-between font-black text-sm text-indigo-400 print:text-black pt-2 border-t border-slate-800 print:border-gray-300">
           <span>Totale omzet:</span>
           <span>€{session.transactions.reduce((acc, t) => acc + t.total, 0).toFixed(2)}</span>
         </div>
@@ -161,7 +171,6 @@ export default function App() {
   const [pinError, setPinError] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'POS' | 'HISTORY' | 'SETTINGS'>('POS');
-  const [isSyncing, setIsSyncing] = useState(false);
 
   // Vaste Beheerder = Bart
   const [company, setCompany] = useState<Company>(() => {
@@ -194,10 +203,12 @@ export default function App() {
     return active || null;
   });
 
-  // UI States
+  // UI & Form States
   const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
   const [startCashInput, setStartCashInput] = useState('50.00');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: '', price: 0, stock: 0, vatRate: 21, icon: 'beer' });
   const [newStaffName, setNewStaffName] = useState('');
   const [showSalesmanSelection, setShowSalesmanSelection] = useState(false);
   const [isPendingPayment, setIsPendingPayment] = useState<PaymentMethod | null>(null);
@@ -280,17 +291,20 @@ export default function App() {
     setShowOpenShiftModal(false);
   };
 
-  // Payment Finalization
+  // Payment Finalization & Automatic Print
   const initiatePayment = (method: PaymentMethod) => {
     if (cart.length === 0) return;
     
-    // Controle op actieve shift
     if (!currentSession) {
       setShowOpenShiftModal(true);
       return;
     }
 
     setIsPendingPayment(method);
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   const finalizePayment = (method: PaymentMethod) => {
@@ -316,6 +330,12 @@ export default function App() {
     clearCart();
     setIsPendingPayment(null);
     setShowSuccess(true);
+    
+    // TRICK: Automatisch printdialog opstarten
+    setTimeout(() => {
+      window.print();
+    }, 300);
+
     setTimeout(() => setShowSuccess(false), 2500);
   };
 
@@ -324,7 +344,41 @@ export default function App() {
     setPreviewSession(null);
   };
 
-  // Logout / Switch Mode Reset
+  // Product CRUD Handlers
+  const handleAddProduct = () => {
+    if (!newProduct.name || !newProduct.price) return;
+    const created: Product = {
+      id: Date.now().toString(),
+      name: newProduct.name,
+      price: Number(newProduct.price),
+      stock: Number(newProduct.stock || 0),
+      vatRate: Number(newProduct.vatRate || 21),
+      icon: newProduct.icon || 'beer'
+    };
+    setProducts(prev => [...prev, created]);
+    setNewProduct({ name: '', price: 0, stock: 0, vatRate: 21, icon: 'beer' });
+    setIsAddingProduct(false);
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Staff CRUD Handlers
+  const handleAddStaff = () => {
+    if (newStaffName.trim()) {
+      setCompany(prev => ({ ...prev, salesmen: [...prev.salesmen, newStaffName.trim()] }));
+      setNewStaffName('');
+    }
+  };
+
+  const handleDeleteStaff = (name: string) => {
+    setCompany(prev => ({
+      ...prev,
+      salesmen: prev.salesmen.filter(s => s !== name)
+    }));
+  };
+
   const handleLogout = () => {
     setAppMode('SELECT');
     setTargetMode(null);
@@ -349,7 +403,6 @@ export default function App() {
           </div>
 
           {targetMode === null ? (
-            /* Modus Keuze */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
               <button
                 onClick={() => handleSelectMode('SHOP')}
@@ -378,7 +431,6 @@ export default function App() {
               </button>
             </div>
           ) : (
-            /* PIN / Paswoord Modal */
             <div className="bg-slate-800/80 border border-slate-700 p-8 rounded-3xl max-w-md mx-auto space-y-6 shadow-2xl">
               <div className="w-12 h-12 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto">
                 <Lock size={24} />
@@ -469,9 +521,27 @@ export default function App() {
   // MODE 3: KRAUKER SHOP (POS DASHBOARD)
   // ==========================================
   return (
-    <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden print:bg-white print:h-auto">
+      {/* CSS-styling speciaal om enkel de bon af te drukken */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-receipt, #printable-receipt * {
+            visibility: visible;
+          }
+          #printable-receipt {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+        }
+      `}</style>
+
       {/* Sidebar Navigation */}
-      <aside className="w-20 bg-slate-900 flex flex-col items-center py-6 justify-between shrink-0 z-20">
+      <aside className="w-20 bg-slate-900 flex flex-col items-center py-6 justify-between shrink-0 z-20 print:hidden">
         <div className="flex flex-col items-center gap-6 w-full">
           <button 
             onClick={handleLogout}
@@ -524,9 +594,9 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden relative bg-slate-50 flex">
+      <main className="flex-1 overflow-hidden relative bg-slate-50 flex print:bg-white print:overflow-visible">
         {activeTab === 'POS' && (
-          <div className="flex-1 flex h-full">
+          <div className="flex-1 flex h-full print:hidden">
             {/* Products Grid (4 Producten per rij) */}
             <div className="flex-1 p-6 overflow-y-auto space-y-6">
               <div className="flex justify-between items-center border-b border-slate-200 pb-4">
@@ -563,7 +633,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* GRID: 4 KOLOMMEN PER RIJ */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {products.map(p => (
                   <button
@@ -663,7 +732,7 @@ export default function App() {
         )}
 
         {activeTab === 'HISTORY' && (
-          <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto space-y-6 w-full pb-24">
+          <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto space-y-6 w-full pb-24 print:hidden">
             <h1 className="text-3xl font-black tracking-tight text-slate-900">Historiek & Shiften</h1>
             <div className="space-y-4">
               {sessions.map(s => (
@@ -691,13 +760,21 @@ export default function App() {
           </div>
         )}
 
+        {/* SETTINGS (MET PRODUCT EN STAFF MANAGEMENT) */}
         {activeTab === 'SETTINGS' && (
-          <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto space-y-8 w-full pb-24">
+          <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto space-y-8 w-full pb-24 print:hidden">
             <h1 className="text-3xl font-black tracking-tight text-slate-900">Instellingen</h1>
             
+            {/* PRODUCT MANAGEMENT */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Producten Catalogus</h2>
+                <button 
+                  onClick={() => setIsAddingProduct(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-white bg-indigo-600 px-3.5 py-2 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  <Plus size={16} /> Product Toevoegen
+                </button>
               </div>
 
               <div className="space-y-2">
@@ -712,19 +789,28 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => setEditingProduct(p)} 
-                      className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
-                    >
-                      <Edit2 size={16} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setEditingProduct(p)} 
+                        className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteProduct(p.id)} 
+                        className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
+            {/* STAFF MANAGEMENT */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-              <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Medewerkers</h2>
+              <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Medewerkers Management</h2>
               <div className="flex gap-2">
                 <input 
                   type="text" 
@@ -734,25 +820,97 @@ export default function App() {
                   className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-medium outline-none focus:border-indigo-500"
                 />
                 <button 
-                  onClick={() => {
-                    if (newStaffName.trim()) {
-                      setCompany(prev => ({ ...prev, salesmen: [...prev.salesmen, newStaffName.trim()] }));
-                      setNewStaffName('');
-                    }
-                  }} 
+                  onClick={handleAddStaff} 
                   className="bg-indigo-600 text-white px-5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-indigo-700 transition-all flex items-center gap-1"
                 >
                   <Plus size={18} /> Toevoegen
                 </button>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                {(company.salesmen || []).map(name => (
+                  <div key={name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="font-bold text-xs text-slate-800">{name}</span>
+                    {name !== 'Bart' && (
+                      <button 
+                        onClick={() => handleDeleteStaff(name)} 
+                        className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
       </main>
 
+      {/* MODAL: NIEUW PRODUCT TOEVOEGEN */}
+      {isAddingProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-6 print:hidden">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center">
+              <h3 className="font-black text-lg text-slate-900">Nieuw Product</h3>
+              <button onClick={() => setIsAddingProduct(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Naam</label>
+                <input 
+                  type="text" 
+                  value={newProduct.name} 
+                  onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Prijs (€)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={newProduct.price || ''} 
+                  onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })} 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Stock</label>
+                <input 
+                  type="number" 
+                  value={newProduct.stock || ''} 
+                  onChange={e => setNewProduct({ ...newProduct, stock: parseInt(e.target.value) || 0 })} 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Icoon</label>
+                <select 
+                  value={newProduct.icon} 
+                  onChange={e => setNewProduct({ ...newProduct, icon: e.target.value })} 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
+                >
+                  <option value="beer">Bier / Fles</option>
+                  <option value="glass">Glas</option>
+                  <option value="gift">Cadeau / Box</option>
+                  <option value="package">Pakket / Merch</option>
+                </select>
+              </div>
+            </div>
+            <button 
+              onClick={handleAddProduct} 
+              className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-indigo-700 transition-all"
+            >
+              Toevoegen
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* OPEN SHIFT MODAL */}
       {showOpenShiftModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-6 print:hidden">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl text-center">
             <div className="w-14 h-14 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto">
               <PlayCircle size={32} />
@@ -789,9 +947,9 @@ export default function App() {
         </div>
       )}
 
-      {/* MODALS */}
+      {/* MODAL: EDIT PRODUCT */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-6 print:hidden">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
             <div className="flex justify-between items-center">
               <h3 className="font-black text-lg text-slate-900">Product Bewerken</h3>
@@ -817,6 +975,15 @@ export default function App() {
                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
                 />
               </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Stock</label>
+                <input 
+                  type="number" 
+                  value={editingProduct.stock || 0} 
+                  onChange={e => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })} 
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
             </div>
             <button 
               onClick={() => {
@@ -833,7 +1000,7 @@ export default function App() {
 
       {/* Staff Selector Modal */}
       {showSalesmanSelection && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-6 print:hidden">
           <div className="bg-white rounded-3xl p-6 max-w-xs w-full space-y-4 shadow-2xl text-center">
             <h3 className="font-black text-lg text-slate-900">Kies Verkoper</h3>
             <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -859,7 +1026,7 @@ export default function App() {
 
       {/* Payment Confirmation Modal */}
       {isPendingPayment && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-6 print:hidden">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-8 max-w-xs w-full space-y-6 text-center shadow-2xl">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${
               isPendingPayment === PaymentMethod.CARD ? 'bg-sky-500/20 text-sky-400' : 'bg-emerald-500/20 text-emerald-400'
@@ -890,11 +1057,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Kassaticket Modal met "Afsluiten & Nieuwe Verkoop" Knop */}
+      {/* Kassaticket Modal met "Afsluiten & Nieuwe Verkoop" Knop & Handmatige Print Knop */}
       {(previewSession || previewTransaction) && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl flex flex-col">
-            <div className="flex justify-between items-center text-white">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 print:p-0 print:bg-white print:static print:block">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl flex flex-col print:border-none print:shadow-none print:p-0">
+            <div className="flex justify-between items-center text-white print:hidden">
               <h3 className="font-black text-base">
                 {previewSession ? 'Shift Rapport' : 'Kassabon'}
               </h3>
@@ -908,7 +1075,13 @@ export default function App() {
 
             <Receipt company={company} session={previewSession} transaction={previewTransaction} />
 
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2 pt-2 print:hidden">
+              <button 
+                onClick={handlePrint} 
+                className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-wider hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
+              >
+                <Printer size={16} /> Print Opnieuw
+              </button>
               <button 
                 onClick={closeReceiptAndReset} 
                 className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-indigo-500 transition-all flex items-center justify-center gap-2"
@@ -922,7 +1095,7 @@ export default function App() {
 
       {/* Success Notification */}
       {showSuccess && (
-        <div className="fixed inset-x-6 top-8 z-50 max-w-md mx-auto bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-center gap-3">
+        <div className="fixed inset-x-6 top-8 z-50 max-w-md mx-auto bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-center gap-3 print:hidden">
           <CheckCircle size={20} />
           <span className="font-black text-xs uppercase tracking-wider">Transactie Verwerkt!</span>
         </div>
