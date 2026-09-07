@@ -1,7 +1,256 @@
-{/* Action row for session item */}
+import React, { useState, useEffect } from 'react';
+import { 
+  Trash2, 
+  Edit2, 
+  Plus, 
+  X, 
+  Download, 
+  RotateCcw, 
+  CreditCard, 
+  CheckCircle,
+  ShoppingBag,
+  History,
+  Settings,
+  Users
+} from 'lucide-react';
+
+// Mock data en types
+export enum PaymentMethod {
+  CASH = 'CASH',
+  CARD = 'CARD'
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+  vatRate: number;
+  stock?: number;
+  color?: string;
+  updatedAt?: number;
+}
+
+export interface Company {
+  name: string;
+  sellerName: string;
+  salesmen: string[];
+  updatedAt?: number;
+}
+
+export interface Transaction {
+  id: string;
+  total: number;
+  method: PaymentMethod;
+  timestamp: number;
+}
+
+export interface Session {
+  id: string;
+  startTime: number;
+  endTime?: number;
+  startCash: number;
+  endCash?: number;
+  transactions: Transaction[];
+}
+
+// Dummy Receipt Component
+const Receipt = ({ company, transaction, session }: { company: Company; transaction?: Transaction | null; session?: Session | null }) => (
+  <div className="p-4 bg-white rounded-lg text-slate-800 font-mono text-xs space-y-2">
+    <div className="text-center font-bold text-sm uppercase">{company.name}</div>
+    <div className="text-center text-[10px] text-slate-500">Bediend door: {company.sellerName}</div>
+    <hr className="my-2 border-dashed" />
+    {transaction && (
+      <div>
+        <div className="flex justify-between font-bold">
+          <span>Totaal</span>
+          <span>€{transaction.total.toFixed(2)}</span>
+        </div>
+        <div className="text-[10px] text-slate-500">Betaalmethode: {transaction.method}</div>
+      </div>
+    )}
+    {session && (
+      <div>
+        <div className="font-bold border-b pb-1 mb-1">Shift Samenvatting</div>
+        <div>Start contant: €{session.startCash.toFixed(2)}</div>
+        {session.endCash !== undefined && <div>Eind contant: €{session.endCash.toFixed(2)}</div>}
+        <div>Aantal transacties: {session.transactions.length}</div>
+      </div>
+    )}
+  </div>
+);
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'POS' | 'HISTORY' | 'SETTINGS'>('POS');
+  const [activeMode, setActiveMode] = useState<'DEFAULT' | 'CUSTOM'>('DEFAULT');
+
+  // State
+  const [company, setCompany] = useState<Company>({
+    name: 'Krauker Anijs',
+    sellerName: 'Beheerder',
+    salesmen: ['Beheerder', 'Medewerker 1']
+  });
+
+  const [products, setProducts] = useState<Product[]>([
+    { id: '1', name: 'Krauker Anijs 33cl', price: 2.50, vatRate: 21, stock: 120, color: 'bg-amber-400' },
+    { id: '2', name: 'Krauker Glas', price: 3.00, vatRate: 21, stock: 45, color: 'bg-sky-400' }
+  ]);
+
+  const [sessions, setSessions] = useState<Session[]>([
+    {
+      id: 'sess-1',
+      startTime: Date.now() - 3600000 * 4,
+      endTime: Date.now() - 3600000,
+      startCash: 100.00,
+      endCash: 175.00,
+      transactions: [
+        { id: 'tx-1', total: 25.00, method: PaymentMethod.CASH, timestamp: Date.now() - 3600000 * 3 },
+        { id: 'tx-2', total: 50.00, method: PaymentMethod.CARD, timestamp: Date.now() - 3600000 * 2 }
+      ]
+    }
+  ]);
+
+  const [currentSession, setCurrentSession] = useState<Session | null>(sessions[0]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [showSalesmanSelection, setShowSalesmanSelection] = useState(false);
+  const [isPendingCardConfirmation, setIsPendingCardConfirmation] = useState(false);
+  const [isClosingSession, setIsClosingSession] = useState(false);
+  const [endCashInput, setEndCashInput] = useState('');
+  const [previewTransaction, setPreviewTransaction] = useState<Transaction | null>(null);
+  const [previewSession, setPreviewSession] = useState<Session | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const totals = { total: 12.50 };
+
+  // Handlers
+  const exportData = (type: string) => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(products, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `${type.toLowerCase()}_export.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const addStaff = () => {
+    if (!newStaffName.trim()) return;
+    setCompany(prev => ({ ...prev, salesmen: [...prev.salesmen, newStaffName.trim()] }));
+    setNewStaffName('');
+  };
+
+  const removeStaff = (name: string) => {
+    setCompany(prev => ({ ...prev, salesmen: prev.salesmen.filter(s => s !== name) }));
+  };
+
+  const handleResetToDefaults = () => {
+    if (confirm('Weet je zeker dat je alle gegevens wilt herstellen naar de standaardwaarden?')) {
+      setActiveMode('DEFAULT');
+    }
+  };
+
+  const setPreviewSessionHandler = (session: Session) => {
+    setPreviewSession(session);
+  };
+
+  const deleteSessionFromHistory = (id: string) => {
+    setSessions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const finalizePayment = (method: PaymentMethod) => {
+    setIsPendingCardConfirmation(false);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
+
+  const closeSession = (cash: number) => {
+    if (currentSession) {
+      const updated = { ...currentSession, endTime: Date.now(), endCash: cash };
+      setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+      setCurrentSession(null);
+    }
+    setIsClosingSession(false);
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
+      {/* Sidebar Navigation */}
+      <aside className="w-20 bg-slate-900 flex flex-col items-center py-6 gap-6 shrink-0">
+        <div className="w-10 h-10 bg-indigo-500 rounded-2xl flex items-center justify-center text-white font-black text-xl">
+          K
+        </div>
+        <nav className="flex flex-col gap-4 w-full px-3">
+          <button 
+            onClick={() => setActiveTab('POS')} 
+            className={`p-3 rounded-2xl flex items-center justify-center transition-colors ${activeTab === 'POS' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            title="Kassa"
+          >
+            <ShoppingBag size={20} />
+          </button>
+          <button 
+            onClick={() => setActiveTab('HISTORY')} 
+            className={`p-3 rounded-2xl flex items-center justify-center transition-colors ${activeTab === 'HISTORY' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            title="Historiek"
+          >
+            <History size={20} />
+          </button>
+          <button 
+            onClick={() => setActiveTab('SETTINGS')} 
+            className={`p-3 rounded-2xl flex items-center justify-center transition-colors ${activeTab === 'SETTINGS' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            title="Instellingen"
+          >
+            <Settings size={20} />
+          </button>
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-hidden relative">
+        {activeTab === 'POS' && (
+          <div className="p-6 h-full flex flex-col justify-between">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight">Kassa Dashboard</h2>
+              <p className="text-slate-500 text-sm mt-1">Actieve medewerker: <span className="font-bold text-indigo-600">{company.sellerName}</span></p>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowSalesmanSelection(true)}
+                className="px-4 py-3 bg-white border rounded-2xl font-bold text-xs flex items-center gap-2 hover:bg-slate-50"
+              >
+                <Users size={16} /> Wissel Medewerker
+              </button>
+              <button 
+                onClick={() => setIsPendingCardConfirmation(true)}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-xs uppercase tracking-wider shadow-lg hover:bg-indigo-700"
+              >
+                Afrekenen (€{totals.total.toFixed(2)})
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'HISTORY' && (
+          <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
+            <h2 className="text-2xl font-black tracking-tighter">Historiek & Shiften</h2>
+            <div className="space-y-4">
+              {sessions.map(s => (
+                <div key={s.id} className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-bold text-sm">Shift {s.id}</div>
+                      <div className="text-[10px] text-slate-400 font-bold">
+                        {new Date(s.startTime).toLocaleString('nl-BE')}
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase">
+                      Voltooid
+                    </span>
+                  </div>
+
+                  {/* Action row for session item */}
                   <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-50">
                     <button 
-                      onClick={() => setPreviewSession(s)} 
+                      onClick={() => setPreviewSessionHandler(s)} 
                       className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all font-bold"
                     >
                       Rapport
@@ -19,6 +268,7 @@
             </div>
           </div>
         )}
+
         {activeTab === 'SETTINGS' && (
           <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
             <h2 className="text-2xl font-black tracking-tighter">Instellingen & Beheer</h2>
