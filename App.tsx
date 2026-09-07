@@ -10,6 +10,7 @@ import { PaymentMethod, CloudConfig } from './types.ts';
 import type { Product, CartItem, Transaction, CompanyDetails, SalesSession, DailySummary } from './types.ts';
 import { DEFAULT_COMPANY, INITIAL_PRODUCTS, AVAILABLE_COLORS } from './constants.ts';
 import { Receipt } from './components/Receipt.tsx';
+import { SyncModal } from './components/SyncModal.tsx';
 import { apiService } from './services/api.ts';
 import type { AppMode } from './services/api.ts';
 import { btPrinterService } from './services/bluetoothPrinter.ts';
@@ -29,6 +30,7 @@ export default function App() {
   // Cloud Sync State
   const [cloudConfig, setCloudConfig] = useState<CloudConfig>(() => apiService.getCloudConfig());
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'POS' | 'REPORTS' | 'SETTINGS'>('POS');
   const [isInitialLoading, setIsInitialLoading] = useState(false);
@@ -180,7 +182,7 @@ export default function App() {
       await btPrinterService.disconnect();
     } catch (e) {
       console.warn("BT disconnect error", e);
-    } finally {
+    } fontinally {
       setBtConnected(false);
     }
   };
@@ -473,13 +475,17 @@ export default function App() {
 
         <div className="flex items-center gap-4 text-white">
           <div className="flex items-center gap-3">
-            <div className={`transition-all duration-500 p-1.5 rounded-full ${
-              syncStatus === 'SYNCING' ? 'bg-indigo-500 sync-pulse' :
-              syncStatus === 'SUCCESS' ? 'bg-emerald-500' :
-              syncStatus === 'ERROR' ? 'bg-rose-500' : 'bg-white/10'
-            }`}>
+            <button 
+              onClick={() => setShowSyncModal(true)}
+              className={`transition-all duration-500 p-1.5 rounded-full ${
+                syncStatus === 'SYNCING' ? 'bg-indigo-500 sync-pulse' :
+                syncStatus === 'SUCCESS' ? 'bg-emerald-500' :
+                syncStatus === 'ERROR' ? 'bg-rose-500' : 'bg-white/10'
+              }`}
+              title="Cloud instellingen"
+            >
               <Cloud size={14} className={syncStatus === 'SYNCING' ? 'animate-pulse text-white' : 'text-white/40'} />
-            </div>
+            </button>
 
             <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-full border border-white/10">
               <span className="text-[9px] font-bold uppercase tracking-widest">{activeMode}</span>
@@ -514,6 +520,7 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB 1: POS */}
         {activeTab === 'POS' && (
           <div className="h-full flex flex-col">
             {!currentSession ? (
@@ -626,6 +633,7 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB 2: REPORTS */}
         {activeTab === 'REPORTS' && (
           <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
             <h2 className="text-2xl font-black tracking-tighter font-bold">Shift Historiek</h2>
@@ -677,94 +685,72 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB 3: SETTINGS */}
         {activeTab === 'SETTINGS' && (
           <div className="h-full overflow-y-auto p-6 space-y-8 pb-32 custom-scrollbar">
-            <h2 className="text-2xl font-black tracking-tighter font-bold">Beheer & Instellingen</h2>
+            <h2 className="text-2xl font-black tracking-tighter">Instellingen & Beheer</h2>
 
             {/* Bedrijfsgegevens */}
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3">
-                <Building2 className={themeAccent} size={20} />
-                <h3 className="font-bold text-lg">Bedrijfsgegevens</h3>
-              </div>
-              <div className="space-y-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <Building2 size={16} /> Bedrijfsinformatie
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
                   type="text"
                   placeholder="Bedrijfsnaam"
                   value={company.name}
                   onChange={e => setCompany({ ...company, name: e.target.value, updatedAt: Date.now() })}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
                 />
                 <input
                   type="text"
                   placeholder="Adres"
-                  value={company.address || ''}
+                  value={company.address}
                   onChange={e => setCompany({ ...company, address: e.target.value, updatedAt: Date.now() })}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
                 />
                 <input
                   type="text"
                   placeholder="BTW-nummer"
-                  value={company.vatNumber || ''}
+                  value={company.vatNumber}
                   onChange={e => setCompany({ ...company, vatNumber: e.target.value, updatedAt: Date.now() })}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Master PIN (Default: 1984)"
+                  value={company.masterPassword || ''}
+                  onChange={e => setCompany({ ...company, masterPassword: e.target.value, updatedAt: Date.now() })}
+                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
 
-            {/* Cloud Synchronisatie Instellingen */}
+            {/* Medewerkers Beheren */}
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3">
-                <Cloud className={themeAccent} size={20} />
-                <h3 className="font-bold text-lg">Cloud Sync Config</h3>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Sync Key / ID</label>
-                  <input
-                    type="text"
-                    placeholder="Sync ID (bijv. krauker-main)"
-                    value={cloudConfig.syncId || ''}
-                    onChange={e => setCloudConfig({ ...cloudConfig, syncId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
-                  />
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs font-bold text-slate-700">Automatische Sync</span>
-                  <button
-                    type="button"
-                    onClick={() => setCloudConfig({ ...cloudConfig, isAutoSync: !cloudConfig.isAutoSync })}
-                    className={`w-12 h-6 rounded-full transition-colors relative ${cloudConfig.isAutoSync ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                  >
-                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${cloudConfig.isAutoSync ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Medewerkers */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3">
-                <User className={themeAccent} size={20} />
-                <h3 className="font-bold text-lg">Medewerkers</h3>
-              </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <UserPlus size={16} /> Medewerkers
+              </h3>
               <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="Naam medewerker"
                   value={newStaffName}
                   onChange={e => setNewStaffName(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                  className="flex-1 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
                 />
-                <button onClick={addStaff} className="bg-slate-900 text-white px-4 rounded-xl font-bold">
-                  <PlusCircle size={20} />
+                <button onClick={addStaff} className="bg-slate-900 text-white px-6 rounded-2xl font-bold active:scale-95 transition-all">
+                  Toevoegen
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(company.salesmen || []).map(staff => (
-                  <span key={staff} className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2">
-                    {staff}
-                    <button onClick={() => removeStaff(staff)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {(company.salesmen || []).map(name => (
+                  <span key={name} className="bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
+                    {name}
+                    <button onClick={() => removeStaff(name)} className="text-slate-400 hover:text-red-500">
+                      <X size={14} />
+                    </button>
                   </span>
                 ))}
               </div>
@@ -773,19 +759,18 @@ export default function App() {
             {/* Producten Beheer */}
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
               <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <Package className={themeAccent} size={20} />
-                  <h3 className="font-bold text-lg">Producten (Max 10)</h3>
-                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <Package size={16} /> Producten (Max 10)
+                </h3>
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {products.map(p => (
-                  <div key={p.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div key={p.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex justify-between items-center">
                     <div>
-                      <div className="font-bold text-sm">{p.name}</div>
-                      <div className="text-xs text-slate-400">€{p.price.toFixed(2)} - Voorraad: {p.stock ?? '∞'}</div>
+                      <div className="font-bold text-sm text-slate-900">{p.name}</div>
+                      <div className="text-xs text-slate-400 font-mono">€{p.price.toFixed(2)} | BTW {p.vatRate}%</div>
                     </div>
-                    <button onClick={() => setEditingProduct(p)} className="p-2 text-slate-500 hover:text-indigo-600">
+                    <button onClick={() => setEditingProduct(p)} className="p-2.5 bg-white rounded-xl text-slate-600 shadow-sm border hover:bg-slate-100 active:scale-95">
                       <Edit2 size={16} />
                     </button>
                   </div>
@@ -793,21 +778,23 @@ export default function App() {
               </div>
             </div>
 
-            {/* Acties */}
+            {/* Data & Backups */}
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="font-bold text-lg">Data & Synchronisatie</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => performSync('PUSH')} className="bg-indigo-50 text-indigo-600 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                  <Cloud size={16} /> Push naar Cloud
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <Globe size={16} /> Data & Cloud Acties
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button onClick={() => performSync('PUSH')} className="p-4 bg-indigo-50 text-indigo-600 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-indigo-100 active:scale-95">
+                  <Cloud size={16} /> Push Naar Cloud
                 </button>
-                <button onClick={() => performSync('PULL')} className="bg-indigo-50 text-indigo-600 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                  <Download size={16} /> Pull van Cloud
+                <button onClick={() => performSync('PULL')} className="p-4 bg-emerald-50 text-emerald-600 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-emerald-100 active:scale-95">
+                  <Download size={16} /> Pull Van Cloud
                 </button>
-                <button onClick={() => exportData('PRODUCTS')} className="bg-slate-100 text-slate-700 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                  <Download size={16} /> Export Producten
+                <button onClick={() => exportData('PRODUCTS')} className="p-4 bg-slate-100 text-slate-700 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-slate-200 active:scale-95">
+                  <Download size={16} /> Exporteer Producten JSON
                 </button>
-                <button onClick={handleResetToDefaults} className="bg-rose-50 text-rose-600 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                  <RotateCcw size={16} /> Reset Standaard
+                <button onClick={handleResetToDefaults} className="p-4 bg-rose-50 text-rose-600 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-rose-100 active:scale-95">
+                  <RotateCcw size={16} /> Reset Naar Standaard
                 </button>
               </div>
             </div>
@@ -815,111 +802,116 @@ export default function App() {
         )}
       </main>
 
-      {/* ------------------------- MODALS ------------------------- */}
+      {/* ------------------------- */}
+      {/* MODALS & OVERLAYS         */}
+      {/* ------------------------- */}
 
-      {/* Modal: Sluiten van de Shift */}
-      {isClosingSession && (
-        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
-            <AlertCircle size={48} className="text-rose-500 mx-auto" />
-            <h3 className="font-bold text-2xl">Shift Sluiten</h3>
-            <p className="text-xs text-slate-500 font-bold">Tel het contant geld in de kassa en voer hieronder het bedrag in.</p>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Geteld contant bedrag (€)"
-              value={endCashInput}
-              onChange={e => setEndCashInput(e.target.value)}
-              className="w-full bg-slate-50 border-2 p-4 rounded-2xl font-bold text-2xl text-center outline-none focus:border-rose-500"
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setIsClosingSession(false)} className="bg-slate-100 text-slate-600 py-4 rounded-xl font-bold text-xs uppercase">
-                Annuleren
-              </button>
-              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="bg-rose-500 text-white py-4 rounded-xl font-bold text-xs uppercase shadow-lg">
-                Bevestigen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Selecteer verkoper */}
+      {/* MODAL: Verkoper Selectie */}
       {showSalesmanSelection && (
-        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
-            <User size={48} className={`${themeAccent} mx-auto`} />
-            <h3 className="font-bold text-2xl">Selecteer Medewerker</h3>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {(company.salesmen || []).map(s => (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <User size={40} className="text-indigo-500 mx-auto" />
+            <h3 className="font-extrabold text-xl">Selecteer Verkoper</h3>
+            <div className="space-y-2">
+              {(company.salesmen || []).map(name => (
                 <button
-                  key={s}
+                  key={name}
                   onClick={() => {
-                    setCompany({ ...company, sellerName: s });
+                    setCompany({ ...company, sellerName: name });
                     setShowSalesmanSelection(false);
                   }}
-                  className="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm text-slate-800 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95 transition-all text-left flex justify-between items-center"
+                  className="w-full py-4 bg-slate-50 hover:bg-indigo-500 hover:text-white rounded-2xl font-bold text-slate-800 transition-all active:scale-95"
                 >
-                  {s}
-                  {company.sellerName === s && <CheckCircle size={16} className="text-indigo-600" />}
+                  {name}
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowSalesmanSelection(false)} className="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold text-xs uppercase">
-              Sluiten
-            </button>
           </div>
         </div>
       )}
 
-      {/* Modal: Wachten op kaartbetaling */}
+      {/* MODAL: Bevestig Kaartbetaling */}
       {isPendingCardConfirmation && (
-        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
-            <CreditCard size={48} className="text-sky-600 mx-auto animate-bounce" />
-            <h3 className="font-bold text-2xl">Kaartbetaling</h3>
-            <p className="text-xs text-slate-500 font-bold">Laat de klant de betaling uitvoeren op de Bancontact terminal.</p>
-            <div className="grid grid-cols-2 gap-3 pt-4">
-              <button onClick={() => setIsPendingCardConfirmation(false)} className="bg-slate-100 text-slate-600 py-4 rounded-xl font-bold text-xs uppercase">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <CreditCard size={48} className="text-sky-500 mx-auto animate-bounce" />
+            <div>
+              <h3 className="font-extrabold text-2xl">Kaartbetaling</h3>
+              <p className="text-xs text-slate-400 mt-1">Ontvang €{totals.total.toFixed(2)} op de terminal</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setIsPendingCardConfirmation(false)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase active:scale-95">
                 Annuleren
               </button>
-              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="bg-sky-600 text-white py-4 rounded-xl font-bold text-xs uppercase shadow-lg">
-                Betaald
+              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="py-4 bg-sky-600 text-white rounded-2xl font-bold text-xs uppercase shadow-lg active:scale-95">
+                Ontvangen
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Product Bewerken */}
+      {/* OVERLAY: Betaling Geslaagd Success Indicator */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-emerald-500 z-[700] flex flex-col items-center justify-center text-white animate-in fade-in">
+          <CheckCircle size={80} className="animate-bounce mb-4" />
+          <h2 className="text-3xl font-black">Betaling Ontvangen!</h2>
+        </div>
+      )}
+
+      {/* MODAL: Product Bewerken */}
       {editingProduct && (
-        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-4 animate-in zoom-in-95">
-            <h3 className="font-bold text-xl">Product Bewerken</h3>
-            <input
-              type="text"
-              value={editingProduct.name}
-              onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
-              placeholder="Naam"
-            />
-            <input
-              type="number"
-              step="0.01"
-              value={editingProduct.price}
-              onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
-              placeholder="Prijs"
-            />
-            <input
-              type="number"
-              value={editingProduct.stock ?? ''}
-              onChange={e => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })}
-              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
-              placeholder="Voorraad"
-            />
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-xs uppercase">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full space-y-6 animate-in zoom-in-95">
+            <h3 className="font-extrabold text-xl">Product Bewerken</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Naam</label>
+                <input
+                  type="text"
+                  value={editingProduct.name}
+                  onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  className="w-full bg-slate-50 p-4 rounded-2xl border font-bold text-slate-800 outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Prijs (€)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingProduct.price}
+                    onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-slate-50 p-4 rounded-2xl border font-bold text-slate-800 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">BTW Tarief (%)</label>
+                  <select
+                    value={editingProduct.vatRate}
+                    onChange={e => setEditingProduct({ ...editingProduct, vatRate: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-slate-50 p-4 rounded-2xl border font-bold text-slate-800 outline-none"
+                  >
+                    <option value={0}>0%</option>
+                    <option value={21}>21%</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-2">Kleur Knop</label>
+                <div className="flex gap-2">
+                  {AVAILABLE_COLORS.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setEditingProduct({ ...editingProduct, color: c })}
+                      className={`w-8 h-8 rounded-full ${c} border-2 ${editingProduct.color === c ? 'border-black scale-110' : 'border-transparent'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setEditingProduct(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase">
                 Annuleren
               </button>
               <button
@@ -927,7 +919,7 @@ export default function App() {
                   setProducts(products.map(p => p.id === editingProduct.id ? { ...editingProduct, updatedAt: Date.now() } : p));
                   setEditingProduct(null);
                 }}
-                className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase"
+                className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase"
               >
                 Opslaan
               </button>
@@ -936,47 +928,88 @@ export default function App() {
         </div>
       )}
 
-      {/* Overlay: Gelukt melding */}
-      {showSuccess && (
-        <div className="fixed inset-0 z-[300] bg-emerald-500/90 backdrop-blur-md flex items-center justify-center text-white">
-          <div className="text-center space-y-4 animate-in zoom-in-50">
-            <CheckCircle size={80} className="mx-auto" />
-            <h2 className="text-3xl font-black uppercase tracking-tight">Verkocht!</h2>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Ticket Preview */}
-      {previewTransaction && (
-        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-6 rounded-[2.5rem] max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <Receipt transaction={previewTransaction} company={company} />
-            <button onClick={() => setPreviewTransaction(null)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase">
-              Sluiten
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Session Report Preview */}
-      {previewSession && (
-        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-6 rounded-[2.5rem] max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-bold text-xl text-center">Shift Rapport</h3>
-            <div className="text-xs space-y-2 bg-slate-50 p-4 rounded-2xl font-mono">
-              <div><strong>Shift ID:</strong> {previewSession.id}</div>
-              <div><strong>Einde:</strong> {new Date(previewSession.endTime!).toLocaleString('nl-NL')}</div>
-              <hr className="my-2 border-slate-200" />
-              <div><strong>Totale Verkoop:</strong> €{(previewSession.summary?.totalSales || 0).toFixed(2)}</div>
-              <div><strong>Contant:</strong> €{(previewSession.summary?.cashTotal || 0).toFixed(2)}</div>
-              <div><strong>Kaart:</strong> €{(previewSession.summary?.cardTotal || 0).toFixed(2)}</div>
-              <div><strong>Aantal Transacties:</strong> {previewSession.summary?.transactionCount}</div>
+      {/* MODAL: Shift Sluiten */}
+      {isClosingSession && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <AlertCircle size={48} className="text-rose-500 mx-auto" />
+            <h3 className="font-extrabold text-2xl">Shift Sluiten</h3>
+            <div className="text-left space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase text-center block">Geteld Contant Geld in Kassa (€)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={endCashInput}
+                onChange={e => setEndCashInput(e.target.value)}
+                className="w-full bg-slate-50 border-2 p-5 rounded-3xl font-bold text-3xl outline-none text-center focus:border-rose-500"
+              />
             </div>
-            <button onClick={() => setPreviewSession(null)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase">
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setIsClosingSession(false)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase">
+                Annuleren
+              </button>
+              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="py-4 bg-rose-600 text-white rounded-2xl font-bold text-xs uppercase shadow-lg">
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Preview Transaction Receipt */}
+      {previewTransaction && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-6 max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-slate-400">Kassabon Preview</h3>
+              <button onClick={() => setPreviewTransaction(null)} className="p-1 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <Receipt transaction={previewTransaction} company={company} />
+            </div>
+            <button onClick={() => setPreviewTransaction(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase">
               Sluiten
             </button>
           </div>
         </div>
+      )}
+
+      {/* MODAL: Preview Shift Session Report */}
+      {previewSession && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-6 max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-slate-400">Shift Rapportage</h3>
+              <button onClick={() => setPreviewSession(null)} className="p-1 text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-4 text-sm custom-scrollbar">
+              <div className="bg-slate-50 p-4 rounded-2xl space-y-2 font-mono text-xs">
+                <div className="flex justify-between"><span>Totaal Verkoop:</span><span className="font-bold">€{(previewSession.summary?.totalSales || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Contant:</span><span>€{(previewSession.summary?.cashTotal || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Kaart:</span><span>€{(previewSession.summary?.cardTotal || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between border-t pt-2"><span>Verwacht Contant:</span><span>€{(previewSession.expectedCash || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Geteld Contant:</span><span>€{(previewSession.endCash || 0).toFixed(2)}</span></div>
+              </div>
+            </div>
+            <button onClick={() => setPreviewSession(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase">
+              Sluiten
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Cloud Sync Config */}
+      {showSyncModal && (
+        <SyncModal
+          config={cloudConfig}
+          onSave={(cfg) => {
+            setCloudConfig(cfg);
+            apiService.setCloudConfig(cfg);
+            setShowSyncModal(false);
+          }}
+          onClose={() => setShowSyncModal(false)}
+        />
       )}
     </div>
   );
