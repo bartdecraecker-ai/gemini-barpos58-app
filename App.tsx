@@ -159,12 +159,12 @@ export default function App() {
       await btPrinterService.disconnect();
     } catch (e) {
       console.warn("BT disconnect error", e);
-    } finally {
+    } fontally {
       setBtConnected(false);
     }
   };
 
-  // Multiuser-proof session delete
+  // Multiuser-proof session delete (Directe DB verstrekking)
   const deleteSessionFromHistory = async (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
     if (!sess) return;
@@ -350,7 +350,6 @@ export default function App() {
     })();
   };
 
-  // Product Aanmaken / Bewerken met expliciete 0% / 21% BTW keuze
   const handleSaveProduct = () => {
     if (!newProductName || !newProductPrice) return;
 
@@ -406,7 +405,7 @@ export default function App() {
     setCompany({ ...company, salesmen: (company.salesmen || []).filter(s => s !== name), updatedAt: Date.now() });
   };
 
-  // Printable Ticket via Browser Window
+  // Printable Ticket via Browser Window (Met Adresregel 1 & 2)
   const handlePrintBrowserTicket = (tx: Transaction) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -427,6 +426,7 @@ export default function App() {
         <body>
           <div class="header">${company.name}</div>
           <div>${company.address || ''}</div>
+          ${company.address2 ? `<div>${company.address2}</div>` : ''}
           <div>BTW: ${company.vatNumber || ''}</div>
           <div class="footer">${company.receiptHeader || ''}</div>
           <div class="info">
@@ -751,7 +751,7 @@ export default function App() {
           <div className="h-full overflow-y-auto p-6 space-y-8 pb-32 custom-scrollbar">
             <h2 className="text-2xl font-black tracking-tighter">Systeem Beheer</h2>
 
-            {/* PRODUCT BEHEER (Inclusief BTW-keuze 0% / 21%) */}
+            {/* PRODUCT BEHEER */}
             <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Package size={20} className={themeAccent} /> {editingProduct ? "Product Bewerken" : "Nieuw Product Toevoegen"}
@@ -774,7 +774,6 @@ export default function App() {
                     onChange={e => setNewProductPrice(e.target.value)}
                     className="bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm outline-none focus:border-indigo-500"
                   />
-                  {/* EXPLICIETE BTW KEUZE */}
                   <select
                     value={newProductVat}
                     onChange={e => setNewProductVat(Number(e.target.value))}
@@ -822,19 +821,39 @@ export default function App() {
               </div>
             </div>
 
-            {/* TICKET HEADER & FOOTER BEHEER */}
+            {/* TICKET BEHEER (Inclusief Adresregel 1 & 2) */}
             <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <ReceiptIcon size={20} className={themeAccent} /> Ticket Instellingen
               </h3>
               <div className="space-y-3">
                 <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Adresregel 1</label>
+                  <input
+                    type="text"
+                    value={company.address || ''}
+                    onChange={e => setCompany({ ...company, address: e.target.value, updatedAt: Date.now() })}
+                    placeholder="Straat en huisnummer"
+                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Adresregel 2 (Postcode & Gemeente)</label>
+                  <input
+                    type="text"
+                    value={company.address2 || ''}
+                    onChange={e => setCompany({ ...company, address2: e.target.value, updatedAt: Date.now() })}
+                    placeholder="bijv. 9300 Aalst"
+                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm outline-none"
+                  />
+                </div>
+                <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Header Tekst (Bovenaan Ticket)</label>
                   <input
                     type="text"
                     value={company.receiptHeader || ''}
                     onChange={e => setCompany({ ...company, receiptHeader: e.target.value, updatedAt: Date.now() })}
-                    placeholder="bijv. Welkom bij BarPOS"
+                    placeholder="bijv. Welkom bij Kraukerbier"
                     className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm outline-none"
                   />
                 </div>
@@ -844,7 +863,7 @@ export default function App() {
                     type="text"
                     value={company.receiptFooter || ''}
                     onChange={e => setCompany({ ...company, receiptFooter: e.target.value, updatedAt: Date.now() })}
-                    placeholder="bijv. Bedankt en tot ziens!"
+                    placeholder="bijv. Bedankt voor uw bezoek!"
                     className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm outline-none"
                   />
                 </div>
