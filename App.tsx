@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShoppingBag, Trash2, Banknote, BarChart3, Settings, Plus, Minus, X, 
   CheckCircle, PlayCircle, Lock, Loader2, User, ChevronDown, 
@@ -45,10 +45,6 @@ export default function App() {
   const [endCashInput, setEndCashInput] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newStaffName, setNewStaffName] = useState('');
-
-  // Multi-user state for active session & staff selection
-  const [selectedStaffName, setSelectedStaffName] = useState<string>('');
-  const isPollingRef = useRef(false);
 
   const themeBg = activeMode === 'SHOP' ? 'bg-amber-500' : 'bg-indigo-500';
   const themeAccent = activeMode === 'SHOP' ? 'text-amber-500' : 'text-indigo-500';
@@ -99,72 +95,18 @@ export default function App() {
       setProducts(p && p.length > 0 ? p.slice(0, 10) : INITIAL_PRODUCTS.slice(0, 10));
       setTransactions(t || []);
       setSessions(s || []);
-      const loadedCompany = c || DEFAULT_COMPANY;
-      setCompany(loadedCompany);
-
-      if (loadedCompany.sellerName) {
-        setSelectedStaffName(loadedCompany.sellerName);
-      } else if (loadedCompany.salesmen && loadedCompany.salesmen.length > 0) {
-        setSelectedStaffName(loadedCompany.salesmen[0]);
-      }
+      setCompany(c || DEFAULT_COMPANY);
 
       const openS = s?.find(sess => sess.status === 'OPEN');
       setCurrentSession(openS || null);
     } catch (err) {
       console.error("Data Load Error:", err);
-    } finally {
+    } font-bold {
       setIsInitialLoading(false);
     }
   };
 
   useEffect(() => { loadContextData(); }, [activeMode]);
-
-  // Periodic polling voor active_shift.json
-  useEffect(() => {
-    if (!isAuthenticated || !activeMode) return;
-
-    const fetchActiveShift = async () => {
-      try {
-        const response = await fetch(`/pos-data/active_shift.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (response.ok) {
-          const remoteShift = await response.json();
-          if (remoteShift && remoteShift.status === 'OPEN') {
-            setCurrentSession({
-              id: remoteShift.shift_id,
-              startTime: new Date(remoteShift.opened_at).getTime(),
-              startCash: remoteShift.start_cash || 0,
-              status: 'OPEN',
-              updatedAt: Date.now()
-            });
-
-            if (Array.isArray(remoteShift.tickets)) {
-              const mappedTransactions: Transaction[] = remoteShift.tickets.map((t: any) => ({
-                id: t.ticket_id || `TX-${Date.now()}`,
-                sessionId: remoteShift.shift_id,
-                timestamp: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
-                dateStr: t.created_at ? new Date(t.created_at).toLocaleDateString('nl-NL') : new Date().toLocaleDateString('nl-NL'),
-                items: t.items || [],
-                subtotal: t.total_amount || 0,
-                vat0: 0,
-                vatHigh: 0,
-                total: t.total_amount || 0,
-                paymentMethod: t.payment_method || PaymentMethod.CASH,
-                salesmanName: t.user || 'Kassa',
-                updatedAt: Date.now()
-              }));
-              setTransactions(mappedTransactions);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Shift sync controle mislukt:", err);
-      }
-    };
-
-    fetchActiveShift();
-    const interval = setInterval(fetchActiveShift, 3000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, activeMode]);
 
   useEffect(() => {
     if (isAuthenticated && activeMode && !isInitialLoading && (products.length > 0 || company.name)) {
@@ -238,20 +180,28 @@ export default function App() {
       await btPrinterService.disconnect();
     } catch (e) {
       console.warn("BT disconnect error", e);
-    } fontFinally: {
+    } finally {
       setBtConnected(false);
     }
   };
 
   const deleteSessionFromHistory = (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
-    if (!sess) return;
+    if (!sess) {
+      alert("Shift niet gevonden.");
+      return;
+    }
 
-    const ok = confirm(`Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${sess.endTime ? new Date(sess.endTime).toLocaleDateString('nl-NL') : ''}`);
+    const ok = confirm(
+      `Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${
+        sess.endTime ? new Date(sess.endTime).toLocaleDateString('nl-NL') : ''
+      }\n\nLet op: bijhorende tickets van deze shift worden ook verwijderd.`
+    );
     if (!ok) return;
 
     setSessions(prev => prev.filter(s => s.id !== sessionId));
     setTransactions(prev => prev.filter(t => t.sessionId !== sessionId));
+
     if (previewSession?.id === sessionId) setPreviewSession(null);
   };
 
@@ -268,8 +218,7 @@ export default function App() {
 
   const initiatePayment = (method: PaymentMethod) => {
     if (!currentSession || cart.length === 0) return;
-    const activeStaff = selectedStaffName || company.sellerName;
-    if (!activeStaff) { setShowSalesmanSelection(true); return; }
+    if (!company.sellerName) { setShowSalesmanSelection(true); return; }
 
     if (method === PaymentMethod.CARD) setIsPendingCardConfirmation(true);
     else finalizePayment(PaymentMethod.CASH);
@@ -278,8 +227,12 @@ export default function App() {
   const applyStockReduction = (items: CartItem[]) => {
     setProducts(prev =>
       prev.map(p => {
-        const soldQty = items.filter(i => i.id === p.id).reduce((sum, i) => sum + (i.quantity || 0), 0);
+        const soldQty = items
+          .filter(i => i.id === p.id)
+          .reduce((sum, i) => sum + (i.quantity || 0), 0);
+
         if (soldQty <= 0) return p;
+
         const currentStock = Number.isFinite(p.stock as any) ? (p.stock as number) : 0;
         return {
           ...p,
@@ -306,76 +259,55 @@ export default function App() {
     setIsPendingCardConfirmation(false);
 
     const now = Date.now();
-    const activeStaff = selectedStaffName || company.sellerName || 'Medewerker';
-    
-    const ticketPayload = {
-      ticket: {
-        user: activeStaff,
-        payment_method: method,
-        total_amount: totals.total,
-        items: cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          vatRate: item.vatRate
-        }))
-      }
+    const tx: Transaction = {
+      id: `TX-${now}`,
+      sessionId: currentSession!.id,
+      timestamp: now,
+      dateStr: new Date(now).toLocaleDateString('nl-NL'),
+      items: [...cart],
+      subtotal: totals.sub,
+      vat0: totals.v0,
+      vatHigh: totals.vHigh,
+      total: totals.total,
+      paymentMethod: method,
+      salesmanName: company.sellerName,
+      updatedAt: now
     };
 
+    applyStockReduction(cart);
+
+    setTransactions(prev => [tx, ...prev]);
+    setCart([]);
+    setShowSuccess(true);
+
     try {
-      const response = await fetch('/pos-data/save_ticket.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ticketPayload)
-      });
+      await apiService.serverPushSale(tx);
+      const delta = await apiService.serverPullDelta();
 
-      const result = await response.json();
-
-      if (result.status === 'success') {
-        applyStockReduction(cart);
-
-        const tx: Transaction = {
-          id: result.ticket_id,
-          sessionId: currentSession?.id || result.shift_id,
-          timestamp: now,
-          dateStr: new Date(now).toLocaleDateString('nl-NL'),
-          items: [...cart],
-          subtotal: totals.sub,
-          vat0: totals.v0,
-          vatHigh: totals.vHigh,
-          total: totals.total,
-          paymentMethod: method,
-          salesmanName: activeStaff,
-          updatedAt: now
-        };
-
-        setTransactions(prev => [tx, ...prev]);
-        setCart([]);
-        setShowSuccess(true);
-
-        if (btConnected) {
-          try { await btPrinterService.printReceipt(tx, company); }
-          catch (e) { console.warn("BT Print error", e); }
-        }
-
-        setTimeout(() => {
-          setShowSuccess(false);
-          setPreviewTransaction(tx);
-        }, 1000);
-      } else {
-        alert("Fout bij opslaan ticket: " + result.message);
-      }
+      if (delta?.products?.length) setProducts(prev => mergeByIdNewest(prev, delta.products).slice(0, 10));
+      if (delta?.transactions?.length) setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
+      if (delta?.sessions?.length) setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
+      if (delta?.company) setCompany(delta.company as any);
     } catch (e) {
-      console.error("Netwerkfout bij opslaan ticket", e);
-      alert("Kon het ticket niet opslaan op de server.");
+      console.warn("Server sale sync/pull failed", e);
     }
+
+    if (btConnected) {
+      try { await btPrinterService.printReceipt(tx, company); }
+      catch (e) { console.warn("BT Print error", e); }
+    }
+
+    setTimeout(() => {
+      setShowSuccess(false);
+      setPreviewTransaction(tx);
+    }, 1000);
   };
 
   const closeSession = (counted: number) => {
     if (!currentSession) return;
 
     const sessionTx = transactions.filter(t => t.sessionId === currentSession.id);
+
     const totalSales = sessionTx.reduce((s, t) => s + (t.total || 0), 0);
     const cashTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((s, t) => s + (t.total || 0), 0);
     const cardTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((s, t) => s + (t.total || 0), 0);
@@ -414,46 +346,37 @@ export default function App() {
     setCurrentSession(null);
     setIsClosingSession(false);
     setActiveTab('REPORTS');
+
+    (async () => {
+      try {
+        await apiService.serverPushSession(closed as any);
+      } catch (e) {
+        console.warn("Server session CLOSE sync failed", e);
+      }
+
+      if (btConnected) {
+        try {
+          await btPrinterService.printSessionReport(closed, sessionTx, company);
+        } catch (e) {
+          console.warn("BT session print failed", e);
+        }
+      }
+    })();
   };
 
   const addStaff = () => {
     if (!newStaffName) return;
-    const updatedStaff = [...(company.salesmen || []), newStaffName];
-    setCompany({ ...company, salesmen: updatedStaff, updatedAt: Date.now() });
-    if (!selectedStaffName) setSelectedStaffName(newStaffName);
+    setCompany({ ...company, salesmen: [...(company.salesmen || []), newStaffName], updatedAt: Date.now() });
     setNewStaffName('');
   };
 
   const removeStaff = (name: string) => {
-    const updatedStaff = (company.salesmen || []).filter(s => s !== name);
-    setCompany({ ...company, salesmen: updatedStaff, updatedAt: Date.now() });
-    if (selectedStaffName === name) {
-      setSelectedStaffName(updatedStaff[0] || '');
-    }
+    setCompany({ ...company, salesmen: (company.salesmen || []).filter(s => s !== name), updatedAt: Date.now() });
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProduct) return;
-
-    setProducts(prev => {
-      const exists = prev.some(p => p.id === editingProduct.id);
-      if (exists) {
-        return prev.map(p => p.id === editingProduct.id ? { ...editingProduct, updatedAt: Date.now() } : p);
-      } else {
-        return [...prev, { ...editingProduct, updatedAt: Date.now() }];
-      }
-    });
-
-    setEditingProduct(null);
-  };
-
-  const handleDeleteProduct = (productId: string) => {
-    if (!confirm("Weet u zeker dat u dit product wilt verwijderen?")) return;
-    setProducts(prev => prev.filter(p => p.id !== productId));
-  };
-
+  // -------------------------
   // UI: MODE SELECTION
+  // -------------------------
   if (!activeMode) {
     return (
       <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-12">
@@ -479,7 +402,9 @@ export default function App() {
     );
   }
 
+  // -------------------------
   // UI: LOGIN
+  // -------------------------
   if (!isAuthenticated) {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center p-6">
@@ -526,7 +451,9 @@ export default function App() {
     );
   }
 
+  // -------------------------
   // UI: MAIN APP
+  // -------------------------
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
       <header className="h-14 bg-slate-950 flex items-center justify-between px-6 shrink-0 z-50">
@@ -535,6 +462,7 @@ export default function App() {
             type="button"
             onClick={() => { if (btConnected) handleBtDisconnect(); else btPrinterService.connect(); }}
             className="flex items-center gap-2"
+            title={btConnected ? "Verbreek printer verbinding" : "Verbind printer"}
           >
             <div className={`w-2 h-2 rounded-full ${btConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} />
             <span className="text-white/50 text-[9px] font-bold uppercase tracking-widest hover:text-white transition-colors">
@@ -545,8 +473,8 @@ export default function App() {
 
         <div className="flex items-center gap-4 text-white">
           <div className="flex items-center gap-3">
-            <div className={`p-1.5 rounded-full ${
-              syncStatus === 'SYNCING' ? 'bg-indigo-500' :
+            <div className={`transition-all duration-500 p-1.5 rounded-full ${
+              syncStatus === 'SYNCING' ? 'bg-indigo-500 sync-pulse' :
               syncStatus === 'SUCCESS' ? 'bg-emerald-500' :
               syncStatus === 'ERROR' ? 'bg-rose-500' : 'bg-white/10'
             }`}>
@@ -577,6 +505,15 @@ export default function App() {
       </nav>
 
       <main className="flex-1 overflow-hidden relative">
+        {isInitialLoading && (
+          <div className="absolute inset-0 z-[500] bg-white/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 size={32} className="animate-spin text-indigo-500" />
+              <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Data Laden...</span>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'POS' && (
           <div className="h-full flex flex-col">
             {!currentSession ? (
@@ -596,17 +533,24 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => {
-                      const sess: SalesSession = {
+                      const sess = {
                         id: `SES-${Date.now()}`,
                         startTime: Date.now(),
                         startCash: parseFloat(startFloatAmount) || 0,
-                        status: 'OPEN',
+                        status: 'OPEN' as const,
                         updatedAt: Date.now()
                       };
+
                       setCurrentSession(sess);
                       setSessions(prev => [sess, ...prev]);
+
+                      try {
+                        apiService.serverPushSession(sess as any);
+                      } catch (e) {
+                        console.warn("Server session OPEN sync failed", e);
+                      }
                     }}
-                    className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all"
+                    className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all font-bold"
                   >
                     Start Shift
                   </button>
@@ -616,8 +560,8 @@ export default function App() {
               <>
                 <div className="h-[35%] bg-white border-b flex flex-col overflow-y-auto p-4 space-y-2 relative shadow-inner custom-scrollbar">
                   <div className="flex justify-between items-center mb-2 sticky top-0 bg-white z-10 py-1">
-                    <button onClick={() => setShowSalesmanSelection(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-sm font-bold">
-                      <User size={12} /> {selectedStaffName || company.sellerName || "Selecteer Medewerker"} <ChevronDown size={12} />
+                    <button onClick={() => setShowSalesmanSelection(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-sm active:scale-95 transition-all font-bold">
+                      <User size={12} /> {company.sellerName || "Selecteer Medewerker"} <ChevronDown size={12} />
                     </button>
                     {cart.length > 0 && <button onClick={() => setCart([])} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={18} /></button>}
                   </div>
@@ -625,9 +569,9 @@ export default function App() {
                   {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center opacity-10 py-10"><ShoppingBag size={48} /></div>
                   ) : cart.map(item => (
-                    <div key={item.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-[1.25rem] border border-slate-200">
+                    <div key={item.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-[1.25rem] border border-slate-200 animate-in slide-in-from-right-4">
                       <div className="flex-1">
-                        <div className="font-bold text-xs text-slate-800">{item.name}</div>
+                        <div className="font-bold text-xs text-slate-800 font-bold">{item.name}</div>
                         <div className="text-[9px] text-slate-400 font-mono font-bold">€{item.price.toFixed(2)} | BTW {item.vatRate}%</div>
                       </div>
                       <div className="flex items-center gap-3 bg-white p-1 rounded-xl border shadow-sm">
@@ -636,7 +580,7 @@ export default function App() {
                           if (ex?.quantity === 1) setCart(cart.filter(i => i.id !== item.id));
                           else setCart(cart.map(i => i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i));
                         }} className="p-1.5"><Minus size={14} /></button>
-                        <span className="font-bold text-xs w-5 text-center">{item.quantity}</span>
+                        <span className="font-bold text-xs w-5 text-center font-bold">{item.quantity}</span>
                         <button onClick={() => setCart(cart.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i))} className="p-1.5"><Plus size={14} /></button>
                       </div>
                     </div>
@@ -655,7 +599,7 @@ export default function App() {
                       className={`${p.color || 'bg-white'} rounded-2xl border-b-2 border-black/10 p-2 h-24 flex flex-col items-center justify-center text-center active:scale-95 transition-all shadow-sm group relative overflow-hidden`}
                     >
                       <span className="text-[10px] font-black leading-tight text-slate-900 mb-1 line-clamp-2 font-bold">{p.name}</span>
-                      <span className="text-[9px] font-bold text-slate-950 bg-white/40 px-1.5 py-0.5 rounded-full font-mono border border-black/5">€{p.price.toFixed(2)}</span>
+                      <span className="text-[9px] font-bold text-slate-950 bg-white/40 px-1.5 py-0.5 rounded-full font-mono border border-black/5 font-bold">€{p.price.toFixed(2)}</span>
                     </button>
                   ))}
                 </div>
@@ -666,14 +610,14 @@ export default function App() {
                       <div className="text-[10px] text-white/40 font-black uppercase tracking-[0.2em] mb-1 font-bold">Totaal</div>
                       <div className="text-4xl font-black font-mono tracking-tighter tabular-nums font-bold">€{totals.total.toFixed(2)}</div>
                     </div>
-                    <div className="text-[10px] text-white/30 font-bold uppercase">BTW Incl.</div>
+                    <div className="text-[10px] text-white/30 font-bold uppercase font-bold">BTW Incl.</div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <button onClick={() => initiatePayment(PaymentMethod.CASH)} disabled={cart.length === 0} className="bg-emerald-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-emerald-800 font-bold">
                       <Banknote size={20} /> Contant
                     </button>
                     <button onClick={() => initiatePayment(PaymentMethod.CARD)} disabled={cart.length === 0} className="bg-sky-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-sky-800 font-bold">
-                      <CreditCard size={20} /> Bancontact
+                      <CreditCard size={20} /> Kaart
                     </button>
                   </div>
                 </div>
@@ -682,35 +626,49 @@ export default function App() {
           </div>
         )}
 
-        {/* REPORST TAB */}
         {activeTab === 'REPORTS' && (
-          <div className="p-6 overflow-y-auto h-full space-y-6 pb-28">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-slate-900">Historiek & Shifts</h2>
-              {currentSession && (
-                <button onClick={() => setIsClosingSession(true)} className="bg-rose-500 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg">
-                  Sluit Huidige Shift
+          <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
+            <h2 className="text-2xl font-black tracking-tighter font-bold">Shift Historiek</h2>
+
+            {currentSession && (
+              <div className="bg-white p-7 rounded-[2.5rem] shadow-xl border-l-[10px] border-amber-500 flex justify-between items-center">
+                <div>
+                  <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest font-bold">Actieve Shift</div>
+                  <div className="text-3xl font-black font-mono text-amber-500 font-bold">
+                    €{transactions.filter(t => t.sessionId === currentSession.id).reduce((s, t) => s + t.total, 0).toFixed(2)}
+                  </div>
+                </div>
+                <button onClick={() => setIsClosingSession(true)} className="bg-rose-500 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 border-b-4 border-rose-700 font-bold">
+                  Sluiten
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="space-y-4">
-              {sessions.map(s => (
-                <div key={s.id} className="bg-white p-5 rounded-2xl border shadow-sm flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-sm text-slate-900">Shift #{s.id.slice(-6)}</div>
-                    <div className="text-xs text-slate-400 font-mono">
-                      {new Date(s.startTime).toLocaleDateString('nl-NL')} {new Date(s.startTime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+              {sessions.filter(s => s.status === 'CLOSED').map(s => (
+                <div key={s.id} className="bg-white p-6 rounded-[2rem] flex flex-col shadow-sm border border-slate-100 group transition-all">
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-4 items-center">
+                      <div className="bg-slate-100 p-3.5 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-all">
+                        <Calendar size={20} />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-slate-800 font-bold">{new Date(s.endTime!).toLocaleDateString('nl-NL')}</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter font-bold">ID: {s.id.slice(-8)}</div>
+                      </div>
                     </div>
-                    <div className="mt-1 flex gap-2">
-                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${s.status === 'OPEN' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                        {s.status}
-                      </span>
+                    <div className="text-right">
+                      <div className="font-black text-emerald-600 font-mono text-xl font-bold">€{(s.summary?.totalSales || 0).toFixed(2)}</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase font-bold">{s.summary?.transactionCount} tickets</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => deleteSessionFromHistory(s.id)} className="p-2 text-slate-300 hover:text-rose-500">
-                      <Trash2 size={18} />
+
+                  <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-50">
+                    <button onClick={() => setPreviewSession(s)} className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all font-bold">
+                      <ReceiptIcon size={14} /> Rapport
+                    </button>
+                    <button onClick={() => deleteSessionFromHistory(s.id)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-[10px] uppercase hover:bg-rose-500 hover:text-white transition-all font-bold">
+                      <Trash2 size={14} /> Verwijder
                     </button>
                   </div>
                 </div>
@@ -719,120 +677,275 @@ export default function App() {
           </div>
         )}
 
-        {/* SETTINGS TAB */}
         {activeTab === 'SETTINGS' && (
-          <div className="p-6 overflow-y-auto h-full space-y-8 pb-28">
-            <h2 className="text-2xl font-bold text-slate-900">Beheer & Instellingen</h2>
-            
-            {/* Products management */}
-            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-bold text-lg text-slate-900">Producten</h3>
-                <button onClick={() => setEditingProduct({ id: `PROD-${Date.now()}`, name: '', price: 0, vatRate: 21, color: 'bg-white' })} className="p-2 bg-slate-950 text-white rounded-xl">
-                  <Plus size={18} />
+          <div className="h-full overflow-y-auto p-6 space-y-8 pb-32 custom-scrollbar">
+            <h2 className="text-2xl font-black tracking-tighter font-bold">Beheer & Instellingen</h2>
+
+            {/* Bedrijfsgegevens */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center gap-3">
+                <Building2 className={themeAccent} size={20} />
+                <h3 className="font-bold text-lg">Bedrijfsgegevens</h3>
+              </div>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Bedrijfsnaam"
+                  value={company.name}
+                  onChange={e => setCompany({ ...company, name: e.target.value, updatedAt: Date.now() })}
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Adres"
+                  value={company.address || ''}
+                  onChange={e => setCompany({ ...company, address: e.target.value, updatedAt: Date.now() })}
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="BTW-nummer"
+                  value={company.vatNumber || ''}
+                  onChange={e => setCompany({ ...company, vatNumber: e.target.value, updatedAt: Date.now() })}
+                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Medewerkers */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center gap-3">
+                <User className={themeAccent} size={20} />
+                <h3 className="font-bold text-lg">Medewerkers</h3>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Naam medewerker"
+                  value={newStaffName}
+                  onChange={e => setNewStaffName(e.target.value)}
+                  className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                />
+                <button onClick={addStaff} className="bg-slate-900 text-white px-4 rounded-xl font-bold">
+                  <PlusCircle size={20} />
                 </button>
               </div>
-              <div className="divide-y">
+              <div className="flex flex-wrap gap-2">
+                {(company.salesmen || []).map(staff => (
+                  <span key={staff} className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2">
+                    {staff}
+                    <button onClick={() => removeStaff(staff)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Producten Beheer */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <Package className={themeAccent} size={20} />
+                  <h3 className="font-bold text-lg">Producten (Max 10)</h3>
+                </div>
+              </div>
+              <div className="space-y-2">
                 {products.map(p => (
-                  <div key={p.id} className="py-3 flex justify-between items-center">
+                  <div key={p.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200">
                     <div>
                       <div className="font-bold text-sm">{p.name}</div>
-                      <div className="text-xs text-slate-400">€{p.price.toFixed(2)} (BTW {p.vatRate}%)</div>
+                      <div className="text-xs text-slate-400">€{p.price.toFixed(2)} - Voorraad: {p.stock ?? '∞'}</div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setEditingProduct(p)} className="p-1.5 text-slate-400 hover:text-slate-900"><Edit2 size={16} /></button>
-                      <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 size={16} /></button>
-                    </div>
+                    <button onClick={() => setEditingProduct(p)} className="p-2 text-slate-500 hover:text-indigo-600">
+                      <Edit2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Staff Management */}
-            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-              <h3 className="font-bold text-lg text-slate-900">Medewerkers</h3>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Naam medewerker..."
-                  value={newStaffName}
-                  onChange={e => setNewStaffName(e.target.value)}
-                  className="flex-1 border p-3 rounded-xl text-sm"
-                />
-                <button onClick={addStaff} className="bg-slate-950 text-white px-4 rounded-xl font-bold text-sm">
-                  Toevoegen
+            {/* Acties */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <h3 className="font-bold text-lg">Data & Synchronisatie</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => performSync('PUSH')} className="bg-indigo-50 text-indigo-600 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                  <Cloud size={16} /> Push naar Cloud
                 </button>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-2">
-                {(company.salesmen || []).map(s => (
-                  <span key={s} className="bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2">
-                    {s}
-                    <button onClick={() => removeStaff(s)} className="text-slate-400 hover:text-rose-500"><X size={12} /></button>
-                  </span>
-                ))}
+                <button onClick={() => performSync('PULL')} className="bg-indigo-50 text-indigo-600 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                  <Download size={16} /> Pull van Cloud
+                </button>
+                <button onClick={() => exportData('PRODUCTS')} className="bg-slate-100 text-slate-700 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                  <Download size={16} /> Export Producten
+                </button>
+                <button onClick={handleResetToDefaults} className="bg-rose-50 text-rose-600 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                  <RotateCcw size={16} /> Reset Standaard
+                </button>
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* STAFF MODAL */}
-      {showSalesmanSelection && (
+      {/* ------------------------- MODALS ------------------------- */}
+
+      {/* Modal: Sluiten van de Shift */}
+      {isClosingSession && (
         <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-3xl max-w-xs w-full space-y-4 text-center">
-            <h3 className="font-bold text-xl">Kies Medewerker</h3>
-            <div className="space-y-2">
-              {(company.salesmen || [company.sellerName || 'Medewerker']).map(staff => (
-                <button
-                  key={staff}
-                  onClick={() => { setSelectedStaffName(staff); setShowSalesmanSelection(false); }}
-                  className="w-full p-4 bg-slate-50 border-2 rounded-2xl font-bold hover:border-indigo-500 active:scale-95 transition-all text-left flex justify-between items-center"
-                >
-                  {staff}
-                  {selectedStaffName === staff && <CheckCircle size={18} className="text-indigo-500" />}
-                </button>
-              ))}
+          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <AlertCircle size={48} className="text-rose-500 mx-auto" />
+            <h3 className="font-bold text-2xl">Shift Sluiten</h3>
+            <p className="text-xs text-slate-500 font-bold">Tel het contant geld in de kassa en voer hieronder het bedrag in.</p>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Geteld contant bedrag (€)"
+              value={endCashInput}
+              onChange={e => setEndCashInput(e.target.value)}
+              className="w-full bg-slate-50 border-2 p-4 rounded-2xl font-bold text-2xl text-center outline-none focus:border-rose-500"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setIsClosingSession(false)} className="bg-slate-100 text-slate-600 py-4 rounded-xl font-bold text-xs uppercase">
+                Annuleren
+              </button>
+              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="bg-rose-500 text-white py-4 rounded-xl font-bold text-xs uppercase shadow-lg">
+                Bevestigen
+              </button>
             </div>
-            <button onClick={() => setShowSalesmanSelection(false)} className="text-slate-400 text-xs font-bold uppercase tracking-wider pt-2">Anuleren</button>
           </div>
         </div>
       )}
 
-      {/* SUCCESS MODAL */}
-      {showSuccess && (
-        <div className="fixed inset-0 z-[300] bg-emerald-500 flex flex-col items-center justify-center text-white space-y-4 animate-in zoom-in-95">
-          <CheckCircle size={80} className="animate-bounce" />
-          <h2 className="text-3xl font-black uppercase tracking-tight">Betaling Ontvangen!</h2>
+      {/* Modal: Selecteer verkoper */}
+      {showSalesmanSelection && (
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <User size={48} className={`${themeAccent} mx-auto`} />
+            <h3 className="font-bold text-2xl">Selecteer Medewerker</h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {(company.salesmen || []).map(s => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setCompany({ ...company, sellerName: s });
+                    setShowSalesmanSelection(false);
+                  }}
+                  className="w-full bg-slate-50 p-4 rounded-2xl font-bold text-sm text-slate-800 hover:bg-indigo-50 hover:text-indigo-600 active:scale-95 transition-all text-left flex justify-between items-center"
+                >
+                  {s}
+                  {company.sellerName === s && <CheckCircle size={16} className="text-indigo-600" />}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowSalesmanSelection(false)} className="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold text-xs uppercase">
+              Sluiten
+            </button>
+          </div>
         </div>
       )}
 
-      {/* EDIT PRODUCT MODAL */}
+      {/* Modal: Wachten op kaartbetaling */}
+      {isPendingCardConfirmation && (
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <CreditCard size={48} className="text-sky-600 mx-auto animate-bounce" />
+            <h3 className="font-bold text-2xl">Kaartbetaling</h3>
+            <p className="text-xs text-slate-500 font-bold">Laat de klant de betaling uitvoeren op de Bancontact terminal.</p>
+            <div className="grid grid-cols-2 gap-3 pt-4">
+              <button onClick={() => setIsPendingCardConfirmation(false)} className="bg-slate-100 text-slate-600 py-4 rounded-xl font-bold text-xs uppercase">
+                Annuleren
+              </button>
+              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="bg-sky-600 text-white py-4 rounded-xl font-bold text-xs uppercase shadow-lg">
+                Betaald
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Product Bewerken */}
       {editingProduct && (
         <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <form onSubmit={handleSaveProduct} className="bg-white p-6 rounded-3xl max-w-sm w-full space-y-4">
-            <h3 className="font-bold text-lg">Product Bewerken</h3>
+          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full space-y-4 animate-in zoom-in-95">
+            <h3 className="font-bold text-xl">Product Bewerken</h3>
             <input
               type="text"
-              placeholder="Productnaam"
               value={editingProduct.name}
               onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-              className="w-full border p-3 rounded-xl text-sm"
-              required
+              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
+              placeholder="Naam"
             />
             <input
               type="number"
               step="0.01"
-              placeholder="Prijs (€)"
-              value={editingProduct.price || ''}
+              value={editingProduct.price}
               onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-              className="w-full border p-3 rounded-xl text-sm"
-              required
+              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
+              placeholder="Prijs"
             />
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-bold text-slate-400">Annuleren</button>
-              <button type="submit" className="px-4 py-2 bg-slate-950 text-white rounded-xl text-xs font-bold">Opslaan</button>
+            <input
+              type="number"
+              value={editingProduct.stock ?? ''}
+              onChange={e => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })}
+              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
+              placeholder="Voorraad"
+            />
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-xs uppercase">
+                Annuleren
+              </button>
+              <button
+                onClick={() => {
+                  setProducts(products.map(p => p.id === editingProduct.id ? { ...editingProduct, updatedAt: Date.now() } : p));
+                  setEditingProduct(null);
+                }}
+                className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase"
+              >
+                Opslaan
+              </button>
             </div>
-          </form>
+          </div>
+        </div>
+      )}
+
+      {/* Overlay: Gelukt melding */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-[300] bg-emerald-500/90 backdrop-blur-md flex items-center justify-center text-white">
+          <div className="text-center space-y-4 animate-in zoom-in-50">
+            <CheckCircle size={80} className="mx-auto" />
+            <h2 className="text-3xl font-black uppercase tracking-tight">Verkocht!</h2>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Ticket Preview */}
+      {previewTransaction && (
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white p-6 rounded-[2.5rem] max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <Receipt transaction={previewTransaction} company={company} />
+            <button onClick={() => setPreviewTransaction(null)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase">
+              Sluiten
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Session Report Preview */}
+      {previewSession && (
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white p-6 rounded-[2.5rem] max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-xl text-center">Shift Rapport</h3>
+            <div className="text-xs space-y-2 bg-slate-50 p-4 rounded-2xl font-mono">
+              <div><strong>Shift ID:</strong> {previewSession.id}</div>
+              <div><strong>Einde:</strong> {new Date(previewSession.endTime!).toLocaleString('nl-NL')}</div>
+              <hr className="my-2 border-slate-200" />
+              <div><strong>Totale Verkoop:</strong> €{(previewSession.summary?.totalSales || 0).toFixed(2)}</div>
+              <div><strong>Contant:</strong> €{(previewSession.summary?.cashTotal || 0).toFixed(2)}</div>
+              <div><strong>Kaart:</strong> €{(previewSession.summary?.cardTotal || 0).toFixed(2)}</div>
+              <div><strong>Aantal Transacties:</strong> {previewSession.summary?.transactionCount}</div>
+            </div>
+            <button onClick={() => setPreviewSession(null)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase">
+              Sluiten
+            </button>
+          </div>
         </div>
       )}
     </div>
