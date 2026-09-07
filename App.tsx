@@ -101,7 +101,7 @@ export default function App() {
       setCurrentSession(openS || null);
     } catch (err) {
       console.error("Data Load Error:", err);
-    } font-bold {
+    } finally {
       setIsInitialLoading(false);
     }
   };
@@ -522,7 +522,7 @@ export default function App() {
                   <PlayCircle size={48} className={`${themeAccent} mx-auto`} />
                   <h3 className="font-bold text-2xl tracking-tighter">Nieuwe Shift</h3>
                   <div className="text-left space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center block font-bold">Startgeld Kassa (€)</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center block">Startgeld Kassa (€)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -550,7 +550,7 @@ export default function App() {
                         console.warn("Server session OPEN sync failed", e);
                       }
                     }}
-                    className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all font-bold"
+                    className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all"
                   >
                     Start Shift
                   </button>
@@ -560,7 +560,7 @@ export default function App() {
               <>
                 <div className="h-[35%] bg-white border-b flex flex-col overflow-y-auto p-4 space-y-2 relative shadow-inner custom-scrollbar">
                   <div className="flex justify-between items-center mb-2 sticky top-0 bg-white z-10 py-1">
-                    <button onClick={() => setShowSalesmanSelection(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-sm active:scale-95 transition-all font-bold">
+                    <button onClick={() => setShowSalesmanSelection(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-sm active:scale-95 transition-all">
                       <User size={12} /> {company.sellerName || "Selecteer Medewerker"} <ChevronDown size={12} />
                     </button>
                     {cart.length > 0 && <button onClick={() => setCart([])} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={18} /></button>}
@@ -571,7 +571,7 @@ export default function App() {
                   ) : cart.map(item => (
                     <div key={item.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-[1.25rem] border border-slate-200 animate-in slide-in-from-right-4">
                       <div className="flex-1">
-                        <div className="font-bold text-xs text-slate-800 font-bold">{item.name}</div>
+                        <div className="font-bold text-xs text-slate-800">{item.name}</div>
                         <div className="text-[9px] text-slate-400 font-mono font-bold">€{item.price.toFixed(2)} | BTW {item.vatRate}%</div>
                       </div>
                       <div className="flex items-center gap-3 bg-white p-1 rounded-xl border shadow-sm">
@@ -580,7 +580,7 @@ export default function App() {
                           if (ex?.quantity === 1) setCart(cart.filter(i => i.id !== item.id));
                           else setCart(cart.map(i => i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i));
                         }} className="p-1.5"><Minus size={14} /></button>
-                        <span className="font-bold text-xs w-5 text-center font-bold">{item.quantity}</span>
+                        <span className="font-bold text-xs w-5 text-center">{item.quantity}</span>
                         <button onClick={() => setCart(cart.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i))} className="p-1.5"><Plus size={14} /></button>
                       </div>
                     </div>
@@ -599,7 +599,7 @@ export default function App() {
                       className={`${p.color || 'bg-white'} rounded-2xl border-b-2 border-black/10 p-2 h-24 flex flex-col items-center justify-center text-center active:scale-95 transition-all shadow-sm group relative overflow-hidden`}
                     >
                       <span className="text-[10px] font-black leading-tight text-slate-900 mb-1 line-clamp-2 font-bold">{p.name}</span>
-                      <span className="text-[9px] font-bold text-slate-950 bg-white/40 px-1.5 py-0.5 rounded-full font-mono border border-black/5 font-bold">€{p.price.toFixed(2)}</span>
+                      <span className="text-[9px] font-bold text-slate-950 bg-white/40 px-1.5 py-0.5 rounded-full font-mono border border-black/5">€{p.price.toFixed(2)}</span>
                     </button>
                   ))}
                 </div>
@@ -608,15 +608,15 @@ export default function App() {
                   <div className="flex justify-between items-end text-white px-2">
                     <div className="flex flex-col">
                       <div className="text-[10px] text-white/40 font-black uppercase tracking-[0.2em] mb-1 font-bold">Totaal</div>
-                      <div className="text-4xl font-black font-mono tracking-tighter tabular-nums font-bold">€{totals.total.toFixed(2)}</div>
+                      <div className="text-4xl font-black font-mono tracking-tighter tabular-nums">€{totals.total.toFixed(2)}</div>
                     </div>
                     <div className="text-[10px] text-white/30 font-bold uppercase font-bold">BTW Incl.</div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => initiatePayment(PaymentMethod.CASH)} disabled={cart.length === 0} className="bg-emerald-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-emerald-800 font-bold">
+                    <button onClick={() => initiatePayment(PaymentMethod.CASH)} disabled={cart.length === 0} className="bg-emerald-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-emerald-800">
                       <Banknote size={20} /> Contant
                     </button>
-                    <button onClick={() => initiatePayment(PaymentMethod.CARD)} disabled={cart.length === 0} className="bg-sky-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-sky-800 font-bold">
+                    <button onClick={() => initiatePayment(PaymentMethod.CARD)} disabled={cart.length === 0} className="bg-sky-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-sky-800">
                       <CreditCard size={20} /> Kaart
                     </button>
                   </div>
@@ -709,6 +709,36 @@ export default function App() {
                   onChange={e => setCompany({ ...company, vatNumber: e.target.value, updatedAt: Date.now() })}
                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
                 />
+              </div>
+            </div>
+
+            {/* Cloud Synchronisatie Instellingen */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center gap-3">
+                <Cloud className={themeAccent} size={20} />
+                <h3 className="font-bold text-lg">Cloud Sync Config</h3>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Sync Key / ID</label>
+                  <input
+                    type="text"
+                    placeholder="Sync ID (bijv. krauker-main)"
+                    value={cloudConfig.syncId || ''}
+                    onChange={e => setCloudConfig({ ...cloudConfig, syncId: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-sm"
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-xs font-bold text-slate-700">Automatische Sync</span>
+                  <button
+                    type="button"
+                    onClick={() => setCloudConfig({ ...cloudConfig, isAutoSync: !cloudConfig.isAutoSync })}
+                    className={`w-12 h-6 rounded-full transition-colors relative ${cloudConfig.isAutoSync ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${cloudConfig.isAutoSync ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
               </div>
             </div>
 
