@@ -1,10 +1,47 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>BarPOS Cloud</title>
+    
+    <!-- API Sync Helper Client -->
     <script>
+      window.POS_API_URL = 'https://www.krauker.be/pos-api/api.php';
+
+      // Globale helper om data op te halen van de server
+      window.fetchPOSData = async function() {
+        try {
+          const response = await fetch(window.POS_API_URL);
+          if (response.ok) {
+            const data = await response.json();
+            window.dispatchEvent(new CustomEvent('pos-data-sync', { detail: data }));
+            return data;
+          }
+        } catch (err) {
+          console.error("Sync fout (ophalen):", err);
+        }
+      };
+
+      // Globale helper om data op te slaan naar de server
+      window.savePOSData = async function(data) {
+        try {
+          await fetch(window.POS_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          window.fetchPOSData(); // Meteen verversen na opslaan
+        } catch (err) {
+          console.error("Sync fout (opslaan):", err);
+        }
+      };
+
+      // Automatisch elke 2 seconden synchroniseren
+      setInterval(() => {
+        window.fetchPOSData();
+      }, 2000);
+
       window.process = { env: { API_KEY: "" } };
       window.global = window;
       window.onerror = function(message, source, lineno, colno, error) {
@@ -20,6 +57,7 @@
         }
       };
     </script>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
@@ -88,24 +126,24 @@
         100% { transform: scale(1); opacity: 1; }
       }
     </style>
+    
     <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@0.463.0?deps=react@19.0.0",
-    "@google/genai": "https://esm.sh/@google/genai@0.21.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
-  <link rel="stylesheet" href="/index.css">
-</head>
+    {
+      "imports": {
+        "react": "https://esm.sh/react@19.0.0",
+        "react-dom": "https://esm.sh/react-dom@19.0.0",
+        "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.463.0?deps=react@19.0.0",
+        "@google/genai": "https://esm.sh/@google/genai@0.21.0",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react/": "https://esm.sh/react@^19.2.3/"
+      }
+    }
+    </script>
+    <link rel="stylesheet" href="/index.css">
+  </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="index.tsx"></script>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
