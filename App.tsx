@@ -29,7 +29,7 @@ export default function App() {
   const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'kassa' | 'rapport' | 'instellingen'>('kassa');
 
-  // Helper voor 8-cijferige random ID (bijv. "48291039")
+  // --- HELPER VOOR 8-CIJFERIG RANDOM REFERENTIE-ID ---
   const generate8DigitId = (): string => {
     return Math.floor(10000000 + Math.random() * 90000000).toString();
   };
@@ -84,11 +84,11 @@ export default function App() {
     const formattedDate = dateObj.toLocaleDateString('nl-BE');
     const formattedTime = dateObj.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
 
-    // RANDOM 8-DIGIT REFERENTIE ID
+    // UNIEK 8-CIJFERIG REFERENTIE NUMMER
     const random8Id = generate8DigitId();
 
     const tx: Transaction = {
-      id: random8Id, // 8-digit random id (bijv. 83920147)
+      id: random8Id,
       sessionId: currentSession?.id || 'DEFAULT_SESSION',
       timestamp: now,
       dateStr: formattedDate,
@@ -170,7 +170,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-slate-100 text-slate-800 font-sans overflow-hidden">
       
-      {/* SIDEBAR NAVIGATION */}
+      {/* SIDEBAR NAVIGATIE */}
       <div className="w-20 bg-slate-900 flex flex-col items-center py-6 gap-6 text-white shadow-xl">
         <button 
           onClick={() => setActiveTab('kassa')} 
@@ -192,10 +192,10 @@ export default function App() {
         </button>
       </div>
 
-      {/* MAIN LAYOUT */}
+      {/* HOOFDSCHERM */}
       {activeTab === 'kassa' && (
         <div className="flex flex-1 overflow-hidden">
-          {/* PRODUCT GRID (LINKS) */}
+          {/* PRODUCTEN OVERZICHT (LINKS) */}
           <div className="flex-1 p-6 overflow-y-auto">
             <h1 className="text-2xl font-bold mb-4 text-slate-900">Producten</h1>
             <div className="grid grid-cols-4 gap-4">
@@ -212,7 +212,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* WINKELMAND & BETALING (RECHTS) */}
+          {/* WINKELMAND & BETAALKNOPPEN (RECHTS) */}
           <div className="w-96 bg-white border-l border-slate-200 flex flex-col h-full shadow-lg">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center">
               <h2 className="font-bold text-lg text-slate-800">Bestelling</h2>
@@ -241,7 +241,7 @@ export default function App() {
               ))}
             </div>
 
-            {/* ACTIES & BETAALKNOPPEN */}
+            {/* BETAALMETHODEN */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-4">
               <div className="flex justify-between text-xl font-black text-slate-900">
                 <span>Totaal</span>
@@ -249,7 +249,7 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {/* CONTANT BETALEN */}
+                {/* CONTANT */}
                 <button
                   onClick={() => finalizePayment('Cash')}
                   disabled={cart.length === 0}
@@ -258,7 +258,7 @@ export default function App() {
                   <Banknote size={20} /> Contant
                 </button>
 
-                {/* KAARTBETALING (TRIGGERT BEVESTIGINGSMODAL) */}
+                {/* KAART (OPENT BEVESTIGINGSMODAL) */}
                 <button
                   onClick={() => setIsPendingCardConfirmation(true)}
                   disabled={cart.length === 0}
@@ -272,10 +272,10 @@ export default function App() {
         </div>
       )}
 
-      {/* BEVESTIGINGSMODAL VOOR KAARTBETALING */}
+      {/* POPUP: BEVESTIGING KAARTBETALING */}
       {isPendingCardConfirmation && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full text-center space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full text-center space-y-6 shadow-2xl">
             <div className="w-16 h-16 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center mx-auto">
               <CreditCard size={32} />
             </div>
@@ -305,7 +305,7 @@ export default function App() {
         </div>
       )}
 
-      {/* SUCCES MODAL MET TICKET PREVIEW */}
+      {/* POPUP: SUCCES & TICKET AFDRUKKEN */}
       {showSuccess && transactions.length > 0 && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-xs w-full text-center space-y-4 shadow-2xl">
