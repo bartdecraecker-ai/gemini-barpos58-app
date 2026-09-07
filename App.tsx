@@ -2,13 +2,13 @@
                   <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-50">
                     <button 
                       onClick={() => setPreviewSession(s)} 
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all font-bold"
                     >
                       Rapport
                     </button>
                     <button 
                       onClick={() => deleteSessionFromHistory(s.id)} 
-                      className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-[10px] uppercase hover:bg-rose-100 transition-all"
+                      className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-[10px] uppercase hover:bg-rose-100 transition-all font-bold"
                       title="Shift en bijhorende tickets verwijderen"
                     >
                       <Trash2 size={14} /> Verwijderen
@@ -19,7 +19,6 @@
             </div>
           </div>
         )}
-
         {activeTab === 'SETTINGS' && (
           <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
             <h2 className="text-2xl font-black tracking-tighter">Instellingen & Beheer</h2>
