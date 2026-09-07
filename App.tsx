@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   CreditCard, Banknote, Trash2, Printer, Settings as SettingsIcon, 
-  BarChart2, RefreshCw, AlertTriangle, Check, Lock, Store, Truck, LogOut
+  BarChart2, RefreshCw, Check, Lock, Store, Truck, LogOut, Plus, Edit, Bluetooth, HardDrive
 } from 'lucide-react';
 import type { 
   Product, CartItem, Transaction, CompanyDetails, SalesSession, PaymentMethod 
@@ -10,30 +10,71 @@ import { Receipt } from './components/Receipt';
 
 export default function App() {
   // --- STATES & CONFIGURATIE ---
-  const [mode, setMode] = useState<'shop' | 'tour' | null>(null); // Startscherm status
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [company, setCompany] = useState<CompanyDetails>({
-    name: 'Kraukerbier',
-    address: 'Straatnaam 123',
-    address2: '9000 Gent',
-    vatNumber: 'BE 0123.456.789',
-    sellerName: 'Kassa 1',
-    receiptHeader: 'Kruidig, Krachtig, Krauker',
-    receiptFooter: 'Bedankt voor uw bezoek!'
+  const [mode, setMode] = useState<'shop' | 'tour' | null>(null);
+  
+  // Producten & Categorieën Initialisatie
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('krauker_products');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', name: 'Krauker Anijs 33cl', price: 2.50, stock: 500, category: 'Bier' },
+      { id: '2', name: 'Krauker Tripel 33cl', price: 2.80, stock: 300, category: 'Bier' },
+      { id: '3', name: 'Krauker Crate (24 flessen)', price: 55.00, stock: 40, category: 'Crates' }
+    ];
   });
+
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    const saved = localStorage.getItem('krauker_transactions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [company, setCompany] = useState<CompanyDetails>(() => {
+    const saved = localStorage.getItem('krauker_company');
+    return saved ? JSON.parse(saved) : {
+      name: 'Kraukerbier',
+      address: 'Grote Markt 1',
+      address2: '9300 Aalst',
+      vatNumber: 'BE 0123.456.789',
+      sellerName: 'Kassa 1',
+      receiptHeader: 'Kruidig, Krachtig, Krauker',
+      receiptFooter: 'Bedankt voor uw bezoek!'
+    };
+  });
+
   const [currentSession, setCurrentSession] = useState<SalesSession | null>(null);
 
-  // Modals & Navigatie States
+  // Modals & Navigatie
   const [isPendingCardConfirmation, setIsPendingCardConfirmation] = useState<boolean>(false);
   const [showSuccess, setShowSuccess] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'kassa' | 'rapport' | 'instellingen'>('kassa');
-  
-  // PIN Beveiliging voor Instellingen
+  const [activeTab, setActiveTab] = useState<'kassa' | 'rapport' | 'producten' | 'instellingen'>('kassa');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Alles');
+
+  // Product Form State (Instellingen/Productbeheer)
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductPrice, setNewProductPrice] = useState('');
+  const [newProductCategory, setNewProductCategory] = useState('Bier');
+  const [newProductStock, setNewProductStock] = useState('');
+
+  // PIN Beveiliging
   const [pinInput, setPinInput] = useState<string>('');
   const [isPinAuthenticated, setIsPinAuthenticated] = useState<boolean>(false);
-  const PIN_CODE = '1234'; // Eventueel aan te passen
+  const PIN_CODE = '1234';
+
+  // Bluetooth / Printer status
+  const [printerStatus, setPrinterStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+
+  // LocalStorage Persistence
+  useEffect(() => {
+    localStorage.setItem('krauker_products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('krauker_transactions', JSON.stringify(transactions));
+  }, [transactions]);
+
+  useEffect(() => {
+    localStorage.setItem('krauker_company', JSON.stringify(company));
+  }, [company]);
 
   // --- HELPER: 8-CIJFERIG REFERENTIE ID ---
   const generate8DigitId = (): string => {
@@ -47,6 +88,16 @@ export default function App() {
     const vHigh = total - sub;
     return { total, sub, v0: 0, vHigh };
   }, [cart]);
+
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(products.map(p => p.category || 'Algemeen')));
+    return ['Alles', ...cats];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    if (selectedCategory === 'Alles') return products;
+    return products.filter(p => (p.category || 'Algemeen') === selectedCategory);
+  }, [products, selectedCategory]);
 
   // --- KASSA ACTIES ---
   const addToCart = (product: Product) => {
@@ -90,12 +141,12 @@ export default function App() {
     const formattedDate = dateObj.toLocaleDateString('nl-BE');
     const formattedTime = dateObj.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
 
-    // UNIEK 8-CIJFERIG REFERENTIENUMMER GENEREREN
+    // GENERATIE VAN DE 8-CIJFERIGE ID
     const random8Id = generate8DigitId();
 
     const tx: Transaction = {
       id: random8Id,
-      sessionId: currentSession?.id || 'SESSION_ACTIVE',
+      sessionId: currentSession?.id || `SESSION_${mode?.toUpperCase()}`,
       timestamp: now,
       dateStr: formattedDate,
       timeStr: formattedTime,
@@ -119,7 +170,30 @@ export default function App() {
     }, 2500);
   };
 
-  // --- AFDRUKKEN (BROWSER) ---
+  // --- PRODUCT BEHEER ---
+  const handleAddProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProductName || !newProductPrice) return;
+
+    const newProd: Product = {
+      id: Date.now().toString(),
+      name: newProductName,
+      price: parseFloat(newProductPrice),
+      category: newProductCategory,
+      stock: newProductStock ? parseInt(newProductStock, 10) : 0
+    };
+
+    setProducts(prev => [...prev, newProd]);
+    setNewProductName('');
+    setNewProductPrice('');
+    setNewProductStock('');
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  // --- AFDRUKKEN (BROWSER TICKET) ---
   const handlePrintBrowserTicket = (tx: Transaction) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -173,7 +247,7 @@ export default function App() {
     printWindow.close();
   };
 
-  // PIN BEVESTIGING VOOR INSTELLINGEN
+  // PIN BEVESTIGING
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (pinInput === PIN_CODE) {
@@ -260,7 +334,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* MODUS SWITCH / LOGOUT */}
         <button
           onClick={() => setMode(null)}
           className="p-3 text-slate-500 hover:text-rose-400 transition-all"
@@ -274,26 +347,49 @@ export default function App() {
       {activeTab === 'kassa' && (
         <div className="flex flex-1 overflow-hidden">
           {/* PRODUCTEN OVERZICHT (LINKS) */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-6 overflow-y-auto flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h1 className="text-2xl font-bold text-slate-900">
                 Producten <span className="text-xs bg-slate-200 text-slate-600 uppercase px-2 py-1 rounded-md ml-2">{mode}</span>
               </h1>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
-              {products.length === 0 ? (
+            {/* CATEGORIE FILTER */}
+            <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                    selectedCategory === cat 
+                      ? 'bg-slate-900 text-white shadow-md' 
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* PRODUCT GRID */}
+            <div className="grid grid-cols-4 gap-4 flex-1 align-content-start">
+              {filteredProducts.length === 0 ? (
                 <div className="col-span-4 text-center py-12 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
-                  Geen producten gevonden. Voeg producten toe via de instellingen.
+                  Geen producten in deze categorie.
                 </div>
               ) : (
-                products.map(product => (
+                filteredProducts.map(product => (
                   <button
                     key={product.id}
                     onClick={() => addToCart(product)}
-                    className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-sky-500 hover:shadow-md transition-all flex flex-col justify-between h-32 text-left"
+                    className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-sky-500 hover:shadow-md transition-all flex flex-col justify-between h-32 text-left group"
                   >
-                    <span className="font-bold text-slate-800 line-clamp-2">{product.name}</span>
+                    <div>
+                      <span className="font-bold text-slate-800 line-clamp-2 group-hover:text-sky-600 transition-colors">{product.name}</span>
+                      {product.stock !== undefined && (
+                        <span className="text-[10px] text-slate-400 block mt-1">Voorraad: {product.stock}</span>
+                      )}
+                    </div>
                     <span className="text-lg font-black text-sky-600">€{product.price.toFixed(2)}</span>
                   </button>
                 ))
@@ -322,7 +418,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-sm">€{(item.price * item.quantity).toFixed(2)}</span>
-                    <button onClick={() => removeFromCart(item.id)} className="text-slate-400 hover:text-rose-500">
+                    <button onClick={() => removeFromCart(item.id)} className="text-slate-400 hover:text-rose-500 font-bold px-1">
                       ×
                     </button>
                   </div>
@@ -365,13 +461,48 @@ export default function App() {
       {activeTab === 'rapport' && (
         <div className="flex-1 p-8 overflow-y-auto">
           <h1 className="text-2xl font-bold mb-6">Dagrapportage</h1>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 max-w-xl">
-            <h2 className="font-bold text-lg mb-4 border-b pb-2">Totaal verkopen vandaag</h2>
-            <div className="text-3xl font-black text-emerald-600 mb-4">
-              €{transactions.reduce((acc, t) => acc + t.total, 0).toFixed(2)}
+          <div className="grid grid-cols-3 gap-6 max-w-4xl mb-8">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="font-bold text-slate-500 text-xs uppercase mb-2">Totale Omzet</h2>
+              <div className="text-3xl font-black text-emerald-600">
+                €{transactions.reduce((acc, t) => acc + t.total, 0).toFixed(2)}
+              </div>
             </div>
-            <div className="text-sm text-slate-500">
-              Aantal transacties: {transactions.length}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="font-bold text-slate-500 text-xs uppercase mb-2">Aantal Transacties</h2>
+              <div className="text-3xl font-black text-slate-800">
+                {transactions.length}
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="font-bold text-slate-500 text-xs uppercase mb-2">Gemiddelde Bon</h2>
+              <div className="text-3xl font-black text-sky-600">
+                €{transactions.length > 0 ? (transactions.reduce((acc, t) => acc + t.total, 0) / transactions.length).toFixed(2) : '0.00'}
+              </div>
+            </div>
+          </div>
+
+          {/* HISTORIEK */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 max-w-4xl overflow-hidden">
+            <div className="p-4 border-b font-bold text-slate-800">Laatste Transacties</div>
+            <div className="divide-y">
+              {transactions.slice(0, 10).map(tx => (
+                <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
+                  <div>
+                    <div className="font-bold text-slate-800">Ref: #{tx.id}</div>
+                    <div className="text-xs text-slate-400">{tx.dateStr} {tx.timeStr} • {tx.paymentMethod}</div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="font-bold text-slate-900">€{tx.total.toFixed(2)}</span>
+                    <button 
+                      onClick={() => handlePrintBrowserTicket(tx)}
+                      className="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+                    >
+                      <Printer size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -399,44 +530,97 @@ export default function App() {
               </form>
             </div>
           ) : (
-            <div className="max-w-2xl bg-white p-6 rounded-3xl shadow-sm border space-y-6">
-              <h1 className="text-2xl font-bold">Bedrijfsgegevens</h1>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-500">Zaaknaam</label>
-                  <input
-                    type="text"
-                    value={company.name}
-                    onChange={e => setCompany({ ...company, name: e.target.value })}
-                    className="w-full border p-2 rounded-xl mt-1"
-                  />
+            <div className="max-w-4xl space-y-8">
+              {/* BEDRIJFSGEGEVENS */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border space-y-6">
+                <h1 className="text-xl font-bold border-b pb-3">Bedrijfsgegevens & Ticket Footer</h1>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Zaaknaam</label>
+                    <input
+                      type="text"
+                      value={company.name}
+                      onChange={e => setCompany({ ...company, name: e.target.value })}
+                      className="w-full border p-2 rounded-xl mt-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">BTW-nummer</label>
+                    <input
+                      type="text"
+                      value={company.vatNumber}
+                      onChange={e => setCompany({ ...company, vatNumber: e.target.value })}
+                      className="w-full border p-2 rounded-xl mt-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Adresregel 1</label>
+                    <input
+                      type="text"
+                      value={company.address}
+                      onChange={e => setCompany({ ...company, address: e.target.value })}
+                      className="w-full border p-2 rounded-xl mt-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Adresregel 2 (Postcode / Stad)</label>
+                    <input
+                      type="text"
+                      value={company.address2 || ''}
+                      onChange={e => setCompany({ ...company, address2: e.target.value })}
+                      className="w-full border p-2 rounded-xl mt-1 text-sm"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500">BTW-nummer</label>
+              </div>
+
+              {/* PRODUCTBEHEER */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border space-y-6">
+                <h2 className="text-xl font-bold border-b pb-3">Producten Beheren</h2>
+                
+                <form onSubmit={handleAddProduct} className="grid grid-cols-5 gap-3">
                   <input
                     type="text"
-                    value={company.vatNumber}
-                    onChange={e => setCompany({ ...company, vatNumber: e.target.value })}
-                    className="w-full border p-2 rounded-xl mt-1"
+                    placeholder="Productnaam"
+                    value={newProductName}
+                    onChange={e => setNewProductName(e.target.value)}
+                    className="border p-2 rounded-xl text-sm col-span-2"
                   />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500">Adresregel 1</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Prijs (€)"
+                    value={newProductPrice}
+                    onChange={e => setNewProductPrice(e.target.value)}
+                    className="border p-2 rounded-xl text-sm"
+                  />
                   <input
                     type="text"
-                    value={company.address}
-                    onChange={e => setCompany({ ...company, address: e.target.value })}
-                    className="w-full border p-2 rounded-xl mt-1"
+                    placeholder="Categorie"
+                    value={newProductCategory}
+                    onChange={e => setNewProductCategory(e.target.value)}
+                    className="border p-2 rounded-xl text-sm"
                   />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500">Adresregel 2 (Postcode / Stad)</label>
-                  <input
-                    type="text"
-                    value={company.address2 || ''}
-                    onChange={e => setCompany({ ...company, address2: e.target.value })}
-                    className="w-full border p-2 rounded-xl mt-1"
-                  />
+                  <button type="submit" className="bg-sky-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-1">
+                    <Plus size={16} /> Toevoegen
+                  </button>
+                </form>
+
+                <div className="divide-y border-t mt-4">
+                  {products.map(p => (
+                    <div key={p.id} className="py-3 flex justify-between items-center text-sm">
+                      <div>
+                        <span className="font-bold">{p.name}</span>
+                        <span className="text-xs text-slate-400 ml-2">({p.category})</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="font-bold">€{p.price.toFixed(2)}</span>
+                        <button onClick={() => handleDeleteProduct(p.id)} className="text-rose-500 hover:text-rose-700">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
