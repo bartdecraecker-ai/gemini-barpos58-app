@@ -85,12 +85,27 @@ export default function App() {
     }
   };
 
+  const mergeByIdNewest = <T extends { id: string; updatedAt?: number }>(local: T[], incoming: T[]) => {
+    const map = new Map<string, T>();
+    for (const x of local) map.set(x.id, x);
+    for (const x of incoming) {
+      const prev = map.get(x.id);
+      const a = prev?.updatedAt || 0;
+      const b = x?.updatedAt || 0;
+      if (!prev || b >= a) map.set(x.id, x);
+    }
+    return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  };
+
   const loadContextData = async () => {
     if (!activeMode) return;
     setIsInitialLoading(true);
 
     try {
       await apiService.hydrateInitialData();
+
+      // Synchro tussen apparaten via delta pull
+      const delta = await apiService.serverPullDelta();
 
       const [p, t, c, s] = await Promise.all([
         apiService.getProducts(),
@@ -99,12 +114,16 @@ export default function App() {
         apiService.getSessions(),
       ]);
 
-      setProducts(p && p.length > 0 ? p : INITIAL_PRODUCTS);
-      setTransactions(t || []);
-      setSessions(s || []);
-      setCompany(c || DEFAULT_COMPANY);
+      const mergedSessions = mergeByIdNewest(s || [], (delta?.sessions as SalesSession[]) || []);
+      const mergedTx = mergeByIdNewest(t || [], (delta?.transactions as Transaction[]) || []);
 
-      const openS = s?.find(sess => sess.status === 'OPEN');
+      setProducts(delta?.products?.length ? delta.products : (p && p.length > 0 ? p : INITIAL_PRODUCTS));
+      setTransactions(mergedTx);
+      setSessions(mergedSessions);
+      setCompany(delta?.company || c || DEFAULT_COMPANY);
+
+      // Synchro actieve shift (OPEN status)
+      const openS = mergedSessions.find(sess => sess.status === 'OPEN');
       setCurrentSession(openS || null);
     } catch (err) {
       console.error("Data Load Error:", err);
@@ -114,6 +133,30 @@ export default function App() {
   };
 
   useEffect(() => { loadContextData(); }, [activeMode]);
+
+  // Automatische achtergrond synchronisatie voor actieve shifts tussen telefoon/laptop
+  useEffect(() => {
+    if (!isAuthenticated || !activeMode) return;
+
+    const syncInterval = setInterval(async () => {
+      try {
+        const delta = await apiService.serverPullDelta();
+        if (delta?.sessions?.length) {
+          const merged = mergeByIdNewest(sessions, delta.sessions as SalesSession[]);
+          setSessions(merged);
+          const openS = merged.find(sess => sess.status === 'OPEN');
+          setCurrentSession(openS || null);
+        }
+        if (delta?.transactions?.length) {
+          setTransactions(prev => mergeByIdNewest(prev, delta.transactions as Transaction[]));
+        }
+      } catch (e) {
+        console.warn("Background sync error", e);
+      }
+    }, 5000);
+
+    return () => clearInterval(syncInterval);
+  }, [isAuthenticated, activeMode, sessions]);
 
   useEffect(() => {
     if (isAuthenticated && activeMode && !isInitialLoading && (products.length > 0 || company.name)) {
@@ -159,18 +202,17 @@ export default function App() {
       await btPrinterService.disconnect();
     } catch (e) {
       console.warn("BT disconnect error", e);
-    } fontally {
+    } finally {
       setBtConnected(false);
     }
   };
 
-  // Multiuser-proof session delete (Directe DB verstrekking)
   const deleteSessionFromHistory = async (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
     if (!sess) return;
 
     const ok = confirm(
-      `Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${
+      `Shift verwijderen?\n\nDatum: ${
         sess.endTime ? new Date(sess.endTime).toLocaleDateString('nl-NL') : ''
       }\n\nLet op: bijhorende tickets van deze shift worden in de cloud gewist.`
     );
@@ -208,8 +250,11 @@ export default function App() {
     if (!currentSession || cart.length === 0) return;
     if (!company.sellerName) { setShowSalesmanSelection(true); return; }
 
-    if (method === PaymentMethod.CARD) setIsPendingCardConfirmation(true);
-    else finalizePayment(PaymentMethod.CASH);
+    if (method === PaymentMethod.CARD) {
+      setIsPendingCardConfirmation(true);
+    } else {
+      finalizePayment(PaymentMethod.CASH);
+    }
   };
 
   const applyStockReduction = (items: CartItem[]) => {
@@ -231,27 +276,20 @@ export default function App() {
     );
   };
 
-  const mergeByIdNewest = <T extends { id: string; updatedAt?: number }>(local: T[], incoming: T[]) => {
-    const map = new Map<string, T>();
-    for (const x of local) map.set(x.id, x);
-    for (const x of incoming) {
-      const prev = map.get(x.id);
-      const a = prev?.updatedAt || 0;
-      const b = x?.updatedAt || 0;
-      if (!prev || b >= a) map.set(x.id, x);
-    }
-    return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  };
-
   const finalizePayment = async (method: PaymentMethod) => {
     setIsPendingCardConfirmation(false);
 
     const now = Date.now();
+    // Geen random ID voor het ticketnummer, maar een simpele leesbare tijdcode
+    const dateObj = new Date(now);
+    const formattedDate = dateObj.toLocaleDateString('nl-NL');
+    const formattedTime = dateObj.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
     const tx: Transaction = {
-      id: `TX-${now}`,
+      id: `${formattedTime}`, // Alleen tijd op het ticket i.p.v. random string
       sessionId: currentSession!.id,
       timestamp: now,
-      dateStr: new Date(now).toLocaleDateString('nl-NL'),
+      dateStr: formattedDate,
       items: [...cart],
       subtotal: totals.sub,
       vat0: totals.v0,
@@ -405,7 +443,6 @@ export default function App() {
     setCompany({ ...company, salesmen: (company.salesmen || []).filter(s => s !== name), updatedAt: Date.now() });
   };
 
-  // Printable Ticket via Browser Window (Met Adresregel 1 & 2)
   const handlePrintBrowserTicket = (tx: Transaction) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -413,11 +450,12 @@ export default function App() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Kassaticket ${tx.id}</title>
+          <title>Kassaticket</title>
           <style>
             body { font-family: monospace; padding: 20px; width: 280px; margin: 0 auto; text-align: center; }
-            .header { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
-            .info { font-size: 10px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
+            .header { font-weight: bold; font-size: 14px; margin-bottom: 3px; }
+            .address { font-size: 11px; margin-bottom: 2px; }
+            .info { font-size: 10px; margin-top: 8px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
             .item { display: flex; justify-content: space-between; font-size: 11px; margin: 3px 0; }
             .totals { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; text-align: right; font-size: 12px; font-weight: bold; }
             .footer { margin-top: 15px; font-size: 10px; border-top: 1px dashed #000; padding-top: 5px; }
@@ -425,13 +463,12 @@ export default function App() {
         </head>
         <body>
           <div class="header">${company.name}</div>
-          <div>${company.address || ''}</div>
-          ${company.address2 ? `<div>${company.address2}</div>` : ''}
-          <div>BTW: ${company.vatNumber || ''}</div>
-          <div class="footer">${company.receiptHeader || ''}</div>
+          ${company.address ? `<div class="address">${company.address}</div>` : ''}
+          ${company.address2 ? `<div class="address">${company.address2}</div>` : ''}
+          ${company.vatNumber ? `<div class="address">BTW: ${company.vatNumber}</div>` : ''}
+          ${company.receiptHeader ? `<div class="footer">${company.receiptHeader}</div>` : ''}
           <div class="info">
-            <div>Ticket: ${tx.id}</div>
-            <div>Datum: ${tx.dateStr}</div>
+            <div>Datum: ${tx.dateStr} ${tx.id}</div>
             <div>Bediende: ${tx.salesmanName || 'Kassa'}</div>
           </div>
           ${tx.items.map(i => `<div class="item"><span>${i.quantity}x ${i.name}</span><span>€${(i.price * i.quantity).toFixed(2)}</span></div>`).join('')}
@@ -723,7 +760,7 @@ export default function App() {
                       </div>
                       <div>
                         <div className="font-bold text-sm text-slate-800">{new Date(s.endTime!).toLocaleDateString('nl-NL')}</div>
-                        <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">ID: {s.id.slice(-8)}</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter">Shift Afgesloten</div>
                       </div>
                     </div>
                     <div className="text-right">
@@ -821,7 +858,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* TICKET BEHEER (Inclusief Adresregel 1 & 2) */}
+            {/* TICKET BEHEER (Met Adresregel 1 & 2) */}
             <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <ReceiptIcon size={20} className={themeAccent} /> Ticket Instellingen
@@ -896,6 +933,39 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* MODAL: KAARTBETALING BEVESTIGING */}
+      {isPendingCardConfirmation && (
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
+          <div className="bg-white p-8 rounded-[2.5rem] max-w-sm w-full text-center space-y-6 shadow-2xl animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center mx-auto">
+              <CreditCard size={32} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-slate-900">Kaartbetaling</h3>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Bied de terminal aan de klant aan</p>
+            </div>
+            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Te betalen bedrag</span>
+              <span className="text-4xl font-black font-mono text-slate-900">€{totals.total.toFixed(2)}</span>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setIsPendingCardConfirmation(false)} 
+                className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold text-xs uppercase hover:bg-slate-200 transition-all"
+              >
+                Annuleren
+              </button>
+              <button 
+                onClick={() => finalizePayment(PaymentMethod.CARD)} 
+                className="flex-1 bg-sky-600 text-white py-4 rounded-2xl font-bold text-xs uppercase shadow-lg border-b-4 border-sky-800 active:scale-95 transition-all"
+              >
+                Ontvangen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: SHIFT SLUITEN */}
       {isClosingSession && (
