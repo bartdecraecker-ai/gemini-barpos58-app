@@ -13,7 +13,13 @@ import {
   Users,
   RefreshCw,
   LogOut,
-  Banknote
+  Banknote,
+  Lock,
+  Compass,
+  Store,
+  MapPin,
+  Calendar,
+  ArrowLeft
 } from 'lucide-react';
 
 // ==========================================
@@ -32,14 +38,12 @@ export interface Product {
   vatRate: number;
   stock?: number;
   color?: string;
-  updatedAt?: number;
 }
 
 export interface Company {
   name: string;
   sellerName: string;
   salesmen: string[];
-  updatedAt?: number;
 }
 
 export interface CartItem {
@@ -100,9 +104,6 @@ const Receipt = ({
         <div className="text-[10px] text-slate-500 text-right">
           Betaalmethode: {transaction.method === PaymentMethod.CARD ? 'Kaart' : 'Contant'}
         </div>
-        <div className="text-[9px] text-slate-400 text-center pt-2">
-          {new Date(transaction.timestamp).toLocaleString('nl-BE')}
-        </div>
       </div>
     )}
 
@@ -111,25 +112,11 @@ const Receipt = ({
         <div className="font-bold border-b border-slate-200 pb-1 text-center uppercase tracking-wider text-[11px]">
           Shift Rapport ({session.id})
         </div>
-        <div className="flex justify-between">
-          <span>Start:</span>
-          <span>{new Date(session.startTime).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })}</span>
-        </div>
-        {session.endTime && (
-          <div className="flex justify-between">
-            <span>Einde:</span>
-            <span>{new Date(session.endTime).toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' })}</span>
-          </div>
-        )}
         <div className="flex justify-between"><span>Start contant:</span><span>€{session.startCash.toFixed(2)}</span></div>
         {session.endCash !== undefined && (
           <div className="flex justify-between"><span>Eind contant:</span><span>€{session.endCash.toFixed(2)}</span></div>
         )}
-        <div className="flex justify-between font-bold pt-1 border-t border-slate-100">
-          <span>Aantal verkopen:</span>
-          <span>{session.transactions.length}</span>
-        </div>
-        <div className="flex justify-between font-bold text-indigo-600">
+        <div className="flex justify-between font-bold text-indigo-600 pt-1 border-t border-slate-100">
           <span>Totale omzet:</span>
           <span>€{session.transactions.reduce((acc, t) => acc + t.total, 0).toFixed(2)}</span>
         </div>
@@ -143,10 +130,19 @@ const Receipt = ({
 // ==========================================
 
 export default function App() {
+  // App Mode State ('SELECT', 'SHOP', 'TOUR')
+  const [appMode, setAppMode] = useState<'SELECT' | 'SHOP' | 'TOUR'>('SELECT');
   const [activeTab, setActiveTab] = useState<'POS' | 'HISTORY' | 'SETTINGS'>('POS');
+  
+  // Password Protection State
+  const [pinInput, setPinInput] = useState('');
+  const [isPinAuthenticated, setIsPinAuthenticated] = useState(false);
+  const [pinError, setPinError] = useState(false);
+  const ADMIN_PIN = '1234'; // Wachtwoord / PIN voor instellingen
+
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Persistent State
+  // Persistent LocalStorage State
   const [company, setCompany] = useState<Company>(() => {
     const saved = localStorage.getItem('krauker_company');
     return saved ? JSON.parse(saved) : {
@@ -167,24 +163,7 @@ export default function App() {
 
   const [sessions, setSessions] = useState<Session[]>(() => {
     const saved = localStorage.getItem('krauker_sessions');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: 'SESS-101',
-        startTime: Date.now() - 14400000,
-        endTime: Date.now() - 3600000,
-        startCash: 100.00,
-        endCash: 175.00,
-        transactions: [
-          { 
-            id: 'TX-1', 
-            total: 5.00, 
-            method: PaymentMethod.CASH, 
-            timestamp: Date.now() - 10800000,
-            items: [{ product: { id: '1', name: 'Krauker Anijs 33cl', price: 2.50, vatRate: 21 }, quantity: 2 }]
-          }
-        ]
-      }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -243,6 +222,19 @@ export default function App() {
 
   const totalAmount = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
 
+  // PIN Authentication Check
+  const handlePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput === ADMIN_PIN) {
+      setIsPinAuthenticated(true);
+      setPinError(false);
+      setPinInput('');
+    } else {
+      setPinError(true);
+      setPinInput('');
+    }
+  };
+
   // Sync animation
   const triggerManualSync = () => {
     setIsSyncing(true);
@@ -251,30 +243,7 @@ export default function App() {
     }, 800);
   };
 
-  // Export
-  const exportData = (type: string) => {
-    const data = type === 'PRODUCTS' ? products : sessions;
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `${type.toLowerCase()}_export.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
-  // Staff Management
-  const addStaff = () => {
-    if (!newStaffName.trim()) return;
-    setCompany(prev => ({ ...prev, salesmen: [...prev.salesmen, newStaffName.trim()] }));
-    setNewStaffName('');
-  };
-
-  const removeStaff = (name: string) => {
-    setCompany(prev => ({ ...prev, salesmen: prev.salesmen.filter(s => s !== name) }));
-  };
-
-  // Session & Payment Management
+  // Payment
   const finalizePayment = (method: PaymentMethod) => {
     if (cart.length === 0) return;
 
@@ -295,15 +264,6 @@ export default function App() {
       setSessions(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
     }
 
-    // Update stock locally
-    setProducts(prev => prev.map(p => {
-      const cartItem = cart.find(ci => ci.product.id === p.id);
-      if (cartItem && p.stock !== undefined) {
-        return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
-      }
-      return p;
-    }));
-
     setPreviewTransaction(newTransaction);
     clearCart();
     setIsPendingPayment(null);
@@ -311,31 +271,114 @@ export default function App() {
     setTimeout(() => setShowSuccess(false), 2500);
   };
 
-  const closeSession = () => {
-    const cashVal = parseFloat(endCashInput);
-    if (isNaN(cashVal)) return;
+  // ==========================================
+  // MODE 1: LAUNCHER / CHOICE SCREEN (SHOP vs TOUR)
+  // ==========================================
+  if (appMode === 'SELECT') {
+    return (
+      <div className="h-screen w-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white font-sans">
+        <div className="max-w-xl w-full space-y-8 text-center">
+          <div>
+            <div className="w-16 h-16 bg-indigo-600 rounded-3xl flex items-center justify-center text-white font-black text-3xl shadow-2xl mx-auto mb-4">
+              K
+            </div>
+            <h1 className="text-3xl font-black tracking-tight">Krauker Anijs Kassa</h1>
+            <p className="text-slate-400 text-sm mt-2">Selecteer de gewenste modus om te starten</p>
+          </div>
 
-    if (currentSession) {
-      const updated = { 
-        ...currentSession, 
-        endTime: Date.now(), 
-        endCash: cashVal 
-      };
-      setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-      setCurrentSession(null);
-    }
-    setIsClosingSession(false);
-    setEndCashInput('');
-  };
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+            <button
+              onClick={() => { setAppMode('SHOP'); setActiveTab('POS'); }}
+              className="bg-slate-800 border border-slate-700/80 p-8 rounded-3xl hover:border-indigo-500 hover:bg-slate-800/80 transition-all group flex flex-col items-center text-center space-y-4 shadow-xl active:scale-95"
+            >
+              <div className="w-14 h-14 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Store size={28} />
+              </div>
+              <div>
+                <h2 className="font-black text-xl text-white">Krauker Shop</h2>
+                <p className="text-xs text-slate-400 mt-1">Directe kassa, voorraad, verkopen & afrekenen</p>
+              </div>
+            </button>
 
+            <button
+              onClick={() => { setAppMode('TOUR'); }}
+              className="bg-slate-800 border border-slate-700/80 p-8 rounded-3xl hover:border-amber-500 hover:bg-slate-800/80 transition-all group flex flex-col items-center text-center space-y-4 shadow-xl active:scale-95"
+            >
+              <div className="w-14 h-14 bg-amber-600/20 text-amber-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Compass size={28} />
+              </div>
+              <div>
+                <h2 className="font-black text-xl text-white">Krauker Tour</h2>
+                <p className="text-xs text-slate-400 mt-1">Evenementen, reseller locaties & planning</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MODE 2: KRAUKER TOUR VIEW
+  // ==========================================
+  if (appMode === 'TOUR') {
+    return (
+      <div className="h-screen w-screen bg-slate-900 text-white font-sans flex flex-col">
+        <header className="p-6 border-b border-slate-800 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setAppMode('SELECT')}
+              className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all text-slate-300"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <h1 className="font-black text-xl tracking-tight">Krauker On Tour</h1>
+          </div>
+          <span className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold rounded-full">
+            Event Modus
+          </span>
+        </header>
+
+        <main className="flex-1 p-8 overflow-y-auto max-w-4xl mx-auto w-full space-y-6">
+          <div className="bg-slate-800/60 border border-slate-700/60 p-6 rounded-3xl space-y-4">
+            <h2 className="font-bold text-lg text-slate-200 flex items-center gap-2">
+              <Calendar size={20} className="text-amber-400" /> Geplande Evenementen
+            </h2>
+            <div className="space-y-3">
+              <div className="p-4 bg-slate-900/60 rounded-2xl border border-slate-800 flex justify-between items-center">
+                <div>
+                  <div className="font-bold text-sm text-white">New Orleans Jazz Evening</div>
+                  <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                    <MapPin size={12} /> Bless Pure Taste, Aalst
+                  </div>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-400/10 px-3 py-1 rounded-lg">
+                  22 MEI
+                </span>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MODE 3: KRAUKER SHOP (KASSA / POS DASHBOARD)
+  // ==========================================
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
       {/* Sidebar Navigation */}
       <aside className="w-20 bg-slate-900 flex flex-col items-center py-6 justify-between shrink-0 z-20">
         <div className="flex flex-col items-center gap-6 w-full">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg">
+          <button 
+            onClick={() => setAppMode('SELECT')}
+            className="w-12 h-12 bg-indigo-600 hover:bg-indigo-700 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg transition-all"
+            title="Wissel van Modus"
+          >
             K
-          </div>
+          </button>
+
           <nav className="flex flex-col gap-3 w-full px-3">
             <button 
               onClick={() => setActiveTab('POS')} 
@@ -367,22 +410,24 @@ export default function App() {
           </nav>
         </div>
 
-        <button 
-          onClick={triggerManualSync}
-          className={`p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all ${
-            isSyncing ? 'animate-spin text-indigo-400' : ''
-          }`}
-          title="Handmatige Synchronisatie"
-        >
-          <RefreshCw size={18} />
-        </button>
+        <div className="flex flex-col gap-3 items-center">
+          <button 
+            onClick={triggerManualSync}
+            className={`p-3 rounded-2xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all ${
+              isSyncing ? 'animate-spin text-indigo-400' : ''
+            }`}
+            title="Handmatige Synchronisatie"
+          >
+            <RefreshCw size={18} />
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-hidden relative bg-slate-50 flex">
         {activeTab === 'POS' && (
           <div className="flex-1 flex h-full">
-            {/* Products Grid Section */}
+            {/* Products Grid */}
             <div className="flex-1 p-6 overflow-y-auto space-y-6">
               <div className="flex justify-between items-center border-b border-slate-200 pb-4">
                 <div>
@@ -391,25 +436,14 @@ export default function App() {
                     Actieve verkoper: <span className="font-bold text-indigo-600">{company.sellerName}</span>
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setShowSalesmanSelection(true)}
-                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-100 shadow-sm transition-all"
-                  >
-                    <Users size={14} /> Wissel Verkoper
-                  </button>
-                  {currentSession && (
-                    <button 
-                      onClick={() => setIsClosingSession(true)}
-                      className="px-3 py-2 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-rose-100 transition-all"
-                    >
-                      <LogOut size={14} /> Shift Sluiten
-                    </button>
-                  )}
-                </div>
+                <button 
+                  onClick={() => setShowSalesmanSelection(true)}
+                  className="px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-100 shadow-sm transition-all"
+                >
+                  <Users size={14} /> Wissel Verkoper
+                </button>
               </div>
 
-              {/* Product Grid */}
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 {products.map(p => (
                   <button
@@ -441,7 +475,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Items List */}
               <div className="flex-1 overflow-y-auto p-6 space-y-3">
                 {cart.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
@@ -477,7 +510,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Checkout Controls */}
               <div className="p-6 border-t border-slate-200 bg-slate-50 space-y-4">
                 <div className="flex justify-between items-end">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Totaal te betalen</span>
@@ -518,13 +550,6 @@ export default function App() {
                         {new Date(s.startTime).toLocaleString('nl-BE')}
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
-                      s.endTime 
-                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-                        : 'bg-amber-50 text-amber-600 border-amber-100'
-                    }`}>
-                      {s.endTime ? 'Voltooid' : 'Actief'}
-                    </span>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -533,12 +558,6 @@ export default function App() {
                       className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                     >
                       Rapport
-                    </button>
-                    <button 
-                      onClick={() => setSessions(prev => prev.filter(item => item.id !== s.id))} 
-                      className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-rose-100 transition-all"
-                    >
-                      <Trash2 size={14} /> Verwijderen
                     </button>
                   </div>
                 </div>
@@ -549,82 +568,110 @@ export default function App() {
 
         {activeTab === 'SETTINGS' && (
           <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto space-y-8 w-full pb-24">
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">Instellingen & Beheer</h1>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">Instellingen</h1>
 
-            {/* Product Management */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Producten Catalogus</h2>
-                <button 
-                  onClick={() => exportData('PRODUCTS')} 
-                  className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 px-3.5 py-2 rounded-xl hover:bg-indigo-100 transition-colors"
-                >
-                  <Download size={14} /> Exporteer JSON
-                </button>
+            {/* PASSWORD / PIN LOCK SCREEN */}
+            {!isPinAuthenticated ? (
+              <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-sm max-w-md mx-auto text-center space-y-6">
+                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto">
+                  <Lock size={28} />
+                </div>
+                <div>
+                  <h2 className="font-black text-xl text-slate-900">Beheerder Toegang</h2>
+                  <p className="text-slate-400 text-xs font-medium mt-1">Voer PIN in om instellingen te openen</p>
+                </div>
+
+                <form onSubmit={handlePinSubmit} className="space-y-4">
+                  <input 
+                    type="password" 
+                    maxLength={4}
+                    placeholder="****"
+                    value={pinInput}
+                    onChange={e => setPinInput(e.target.value)}
+                    className="w-full text-center text-2xl tracking-widest font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-indigo-600"
+                  />
+                  {pinError && <p className="text-xs text-rose-500 font-bold">Onjuiste PIN. Probeer opnieuw.</p>}
+                  <button 
+                    type="submit"
+                    className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-md hover:bg-indigo-700 transition-all"
+                  >
+                    Ontgrendelen
+                  </button>
+                </form>
               </div>
-
-              <div className="space-y-2">
-                {products.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full ${p.color || 'bg-slate-300'}`} />
-                      <div>
-                        <div className="font-bold text-sm text-slate-800">{p.name}</div>
-                        <div className="text-xs text-slate-400 font-mono">
-                          €{p.price.toFixed(2)} | BTW {p.vatRate}% | Stock: {p.stock ?? 0}
-                        </div>
-                      </div>
-                    </div>
+            ) : (
+              /* AUTHENTICATED SETTINGS CONTENT */
+              <div className="space-y-8">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Producten Catalogus</h2>
                     <button 
-                      onClick={() => setEditingProduct(p)} 
-                      className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                      onClick={() => {
+                        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(products, null, 2));
+                        const dlAnchor = document.createElement('a');
+                        dlAnchor.setAttribute("href", dataStr);
+                        dlAnchor.setAttribute("download", `products_export.json`);
+                        dlAnchor.click();
+                      }} 
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 px-3.5 py-2 rounded-xl hover:bg-indigo-100 transition-colors"
                     >
-                      <Edit2 size={16} />
+                      <Download size={14} /> Exporteer JSON
                     </button>
                   </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Staff Management */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-              <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Medewerkers</h2>
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Naam medewerker..." 
-                  value={newStaffName} 
-                  onChange={e => setNewStaffName(e.target.value)} 
-                  className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-medium outline-none focus:border-indigo-500"
-                />
-                <button 
-                  onClick={addStaff} 
-                  className="bg-indigo-600 text-white px-5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-indigo-700 transition-all flex items-center gap-1"
-                >
-                  <Plus size={18} /> Toevoegen
-                </button>
-              </div>
+                  <div className="space-y-2">
+                    {products.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded-full ${p.color || 'bg-slate-300'}`} />
+                          <div>
+                            <div className="font-bold text-sm text-slate-800">{p.name}</div>
+                            <div className="text-xs text-slate-400 font-mono">
+                              €{p.price.toFixed(2)} | BTW {p.vatRate}% | Stock: {p.stock ?? 0}
+                            </div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => setEditingProduct(p)} 
+                          className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="flex flex-wrap gap-2 pt-2">
-                {(company.salesmen || []).map(name => (
-                  <div key={name} className="flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700 border border-slate-200">
-                    <span>{name}</span>
-                    <button onClick={() => removeStaff(name)} className="text-slate-400 hover:text-rose-500 transition-colors">
-                      <X size={14} />
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                  <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Medewerkers</h2>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Naam medewerker..." 
+                      value={newStaffName} 
+                      onChange={e => setNewStaffName(e.target.value)} 
+                      className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-medium outline-none focus:border-indigo-500"
+                    />
+                    <button 
+                      onClick={() => {
+                        if (newStaffName.trim()) {
+                          setCompany(prev => ({ ...prev, salesmen: [...prev.salesmen, newStaffName.trim()] }));
+                          setNewStaffName('');
+                        }
+                      }} 
+                      className="bg-indigo-600 text-white px-5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-indigo-700 transition-all flex items-center gap-1"
+                    >
+                      <Plus size={18} /> Toevoegen
                     </button>
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </main>
 
-      {/* ========================================== */}
-      {/* MODALS                                     */}
-      {/* ========================================== */}
-
-      {/* Edit Product Modal */}
+      {/* MODALS */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
@@ -652,19 +699,10 @@ export default function App() {
                   className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
                 />
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Voorraad</label>
-                <input 
-                  type="number" 
-                  value={editingProduct.stock ?? 0} 
-                  onChange={e => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })} 
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-medium text-sm outline-none focus:border-indigo-500"
-                />
-              </div>
             </div>
             <button 
               onClick={() => {
-                setProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...editingProduct, updatedAt: Date.now() } : p));
+                setProducts(prev => prev.map(p => p.id === editingProduct.id ? editingProduct : p));
                 setEditingProduct(null);
               }} 
               className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold uppercase text-xs tracking-wider shadow-lg hover:bg-indigo-700 transition-all"
@@ -685,7 +723,7 @@ export default function App() {
                 <button 
                   key={name} 
                   onClick={() => {
-                    setCompany({ ...company, sellerName: name, updatedAt: Date.now() });
+                    setCompany({ ...company, sellerName: name });
                     setShowSalesmanSelection(false);
                   }} 
                   className="w-full p-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl font-bold text-xs uppercase tracking-wider transition-all border border-slate-100"
@@ -726,38 +764,6 @@ export default function App() {
               <button 
                 onClick={() => setIsPendingPayment(null)} 
                 className="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold uppercase text-xs hover:bg-slate-200 transition-colors"
-              >
-                Annuleren
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Close Shift Modal */}
-      {isClosingSession && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl p-6 max-w-xs w-full space-y-4 shadow-2xl text-center">
-            <h3 className="font-black text-lg text-slate-900">Shift Sluiten</h3>
-            <p className="text-xs text-slate-500 font-medium">Voer de getelde kassa-inhoud (contant) in:</p>
-            <input 
-              type="number" 
-              step="0.01" 
-              placeholder="0.00"
-              value={endCashInput} 
-              onChange={e => setEndCashInput(e.target.value)} 
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-mono text-center font-bold text-lg outline-none focus:border-indigo-500"
-            />
-            <div className="space-y-2 pt-2">
-              <button 
-                onClick={closeSession} 
-                className="w-full bg-rose-600 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-wider shadow-md hover:bg-rose-700 transition-all"
-              >
-                Shift Beëindigen
-              </button>
-              <button 
-                onClick={() => setIsClosingSession(false)} 
-                className="w-full bg-slate-100 text-slate-600 py-2.5 rounded-xl font-bold uppercase text-xs hover:bg-slate-200 transition-colors"
               >
                 Annuleren
               </button>
