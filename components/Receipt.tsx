@@ -1,76 +1,82 @@
 import React from 'react';
-import type { Transaction, CompanyDetails, SalesSession } from '../types.ts';
+import type { Transaction, CompanyDetails } from '../types';
 
 interface ReceiptProps {
-  transaction?: Transaction | null;
-  session?: SalesSession | null;
+  transaction: Transaction;
   company: CompanyDetails;
 }
 
-export const Receipt: React.FC<ReceiptProps> = ({ transaction, session, company }) => {
-  if (!transaction && !session) return null;
-
+export const Receipt: React.FC<ReceiptProps> = ({ transaction, company }) => {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-inner border border-slate-200 font-mono text-xs text-slate-800 space-y-4 max-w-xs mx-auto select-text">
-      {/* HEADER & FIRMAGEGEVENS */}
-      <div className="text-center space-y-1">
-        <div className="font-bold text-base text-slate-900">{company.name}</div>
-        {company.address && <div className="text-[11px] text-slate-600">{company.address}</div>}
-        {company.address2 && <div className="text-[11px] text-slate-600">{company.address2}</div>}
-        {company.vatNumber && <div className="text-[10px] text-slate-500">BTW: {company.vatNumber}</div>}
+    <div className="bg-white p-4 rounded-xl border border-slate-200 text-left text-xs font-mono text-slate-800 space-y-3">
+      {/* KOP: BEDRIJFSGEGEVENS */}
+      <div className="text-center space-y-0.5 border-b border-slate-100 pb-2">
+        <div className="font-bold text-sm text-slate-900 uppercase tracking-wide">
+          {company.name}
+        </div>
+        {company.address && (
+          <div className="text-slate-500">{company.address}</div>
+        )}
+        {company.address2 && (
+          <div className="text-slate-500">{company.address2}</div>
+        )}
+        {company.vatNumber && (
+          <div className="text-slate-500">BTW: {company.vatNumber}</div>
+        )}
         {company.receiptHeader && (
-          <div className="text-[10px] italic text-slate-500 pt-1 border-t border-dashed border-slate-200 mt-2">
+          <div className="text-[10px] text-slate-400 italic mt-1">
             {company.receiptHeader}
           </div>
         )}
       </div>
 
-      <div className="border-b border-dashed border-slate-300 my-2" />
-
-      {/* TICKET DETAILS */}
-      {transaction && (
-        <>
-          <div className="space-y-0.5 text-[10px] text-slate-500">
-            <div className="flex justify-between font-bold text-slate-700">
-              <span>Ref: #{transaction.id}</span>
-              <span>{transaction.timeStr || ''}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Datum: {transaction.dateStr}</span>
-              <span>Bediende: {transaction.salesmanName || 'Kassa'}</span>
-            </div>
+      {/* METADATA: REF & DATUM */}
+      <div className="text-[11px] space-y-0.5 bg-slate-50 p-2 rounded-lg border border-slate-100">
+        <div className="flex justify-between font-bold text-slate-900">
+          <span>Referentie:</span>
+          <span>#{transaction.id}</span>
+        </div>
+        <div className="flex justify-between text-slate-500">
+          <span>Datum:</span>
+          <span>{transaction.dateStr} {transaction.timeStr}</span>
+        </div>
+        {transaction.salesmanName && (
+          <div className="flex justify-between text-slate-500">
+            <span>Bediende:</span>
+            <span>{transaction.salesmanName}</span>
           </div>
+        )}
+      </div>
 
-          <div className="border-b border-dashed border-slate-200 my-2" />
-
-          {/* ARTIKELEN */}
-          <div className="space-y-1">
-            {transaction.items.map((item, index) => (
-              <div key={index} className="flex justify-between items-center text-xs">
-                <span>{item.quantity}x {item.name}</span>
-                <span className="font-bold">€{(item.price * item.quantity).toFixed(2)}</span>
-              </div>
-            ))}
+      {/* ARTIKELLIJST */}
+      <div className="space-y-1.5 py-1">
+        {transaction.items.map((item, index) => (
+          <div key={index} className="flex justify-between items-center text-[11px]">
+            <span className="truncate pr-2">
+              {item.quantity}x {item.name}
+            </span>
+            <span className="font-semibold whitespace-nowrap">
+              €{(item.price * item.quantity).toFixed(2)}
+            </span>
           </div>
+        ))}
+      </div>
 
-          <div className="border-b border-dashed border-slate-300 my-2" />
+      {/* TOTAAL & BETAALMETHODE */}
+      <div className="border-t border-slate-200 pt-2 space-y-1">
+        <div className="flex justify-between text-sm font-bold text-slate-900">
+          <span>TOTAAL</span>
+          <span>€{transaction.total.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-[10px] text-slate-500">
+          <span>Betaalmethode:</span>
+          <span className="font-semibold uppercase">{transaction.paymentMethod}</span>
+        </div>
+      </div>
 
-          {/* TOTAAL & BETAALMETHODE */}
-          <div className="space-y-1 text-right">
-            <div className="flex justify-between font-bold text-sm text-slate-900">
-              <span>TOTAAL:</span>
-              <span>€{transaction.total.toFixed(2)}</span>
-            </div>
-            <div className="text-[10px] text-slate-500 uppercase">
-              Betaald via: {transaction.paymentMethod}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* FOOTER */}
+      {/* VOET: BEDANKT BICHT */}
       {company.receiptFooter && (
-        <div className="text-center text-[10px] italic text-slate-500 pt-2 border-t border-dashed border-slate-200">
+        <div className="text-center text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
           {company.receiptFooter}
         </div>
       )}
