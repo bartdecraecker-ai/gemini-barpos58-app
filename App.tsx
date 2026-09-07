@@ -177,7 +177,7 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleBtDisconnect = async () => {
+ const handleBtDisconnect = async () => {
     try {
       await btPrinterService.disconnect();
     } catch (e) {
