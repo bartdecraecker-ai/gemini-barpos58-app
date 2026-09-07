@@ -187,6 +187,7 @@ export default function App() {
     }
   };
 
+  
   const deleteSessionFromHistory = (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
     if (!sess) {
