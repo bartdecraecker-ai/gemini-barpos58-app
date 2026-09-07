@@ -54,7 +54,6 @@ export default function App() {
   const themeAccent = activeMode === 'SHOP' ? 'text-amber-500' : 'text-indigo-500';
 
   useEffect(() => {
-    // Always launch with startpage (mode selection)
     setActiveMode(null);
 
     const interval = setInterval(() => {
@@ -120,41 +119,52 @@ export default function App() {
 
   useEffect(() => { loadContextData(); }, [activeMode]);
 
-  // Periodic polling for multi-user real-time synchronization
+  // Periodic polling voor active_shift.json
   useEffect(() => {
     if (!isAuthenticated || !activeMode) return;
 
-    const interval = setInterval(async () => {
-      if (isPollingRef.current) return;
-      isPollingRef.current = true;
+    const fetchActiveShift = async () => {
       try {
-        const delta = await apiService.serverPullDelta();
-        if (delta) {
-          if (delta.products?.length) {
-            setProducts(prev => mergeByIdNewest(prev, delta.products).slice(0, 10));
-          }
-          if (delta.transactions?.length) {
-            setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
-          }
-          if (delta.sessions?.length) {
-            const mergedSess = mergeByIdNewest(sessions, delta.sessions as any);
-            setSessions(mergedSess);
-            const openS = mergedSess.find(sess => sess.status === 'OPEN');
-            setCurrentSession(openS || null);
-          }
-          if (delta.company) {
-            setCompany(prev => ({ ...prev, ...delta.company }));
+        const response = await fetch(`/pos-data/active_shift.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (response.ok) {
+          const remoteShift = await response.json();
+          if (remoteShift && remoteShift.status === 'OPEN') {
+            setCurrentSession({
+              id: remoteShift.shift_id,
+              startTime: new Date(remoteShift.opened_at).getTime(),
+              startCash: remoteShift.start_cash || 0,
+              status: 'OPEN',
+              updatedAt: Date.now()
+            });
+
+            if (Array.isArray(remoteShift.tickets)) {
+              const mappedTransactions: Transaction[] = remoteShift.tickets.map((t: any) => ({
+                id: t.ticket_id || `TX-${Date.now()}`,
+                sessionId: remoteShift.shift_id,
+                timestamp: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
+                dateStr: t.created_at ? new Date(t.created_at).toLocaleDateString('nl-NL') : new Date().toLocaleDateString('nl-NL'),
+                items: t.items || [],
+                subtotal: t.total_amount || 0,
+                vat0: 0,
+                vatHigh: 0,
+                total: t.total_amount || 0,
+                paymentMethod: t.payment_method || PaymentMethod.CASH,
+                salesmanName: t.user || 'Kassa',
+                updatedAt: Date.now()
+              }));
+              setTransactions(mappedTransactions);
+            }
           }
         }
       } catch (err) {
-        console.warn("Background polling sync failed", err);
-      } finally {
-        isPollingRef.current = false;
+        console.warn("Shift sync controle mislukt:", err);
       }
-    }, 5000);
+    };
 
+    fetchActiveShift();
+    const interval = setInterval(fetchActiveShift, 3000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, activeMode, sessions]);
+  }, [isAuthenticated, activeMode]);
 
   useEffect(() => {
     if (isAuthenticated && activeMode && !isInitialLoading && (products.length > 0 || company.name)) {
@@ -168,7 +178,6 @@ export default function App() {
         performSync('PUSH');
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, company, transactions, sessions, cloudConfig, isAuthenticated, activeMode, isInitialLoading]);
 
   const performSync = async (type: 'PUSH' | 'PULL') => {
@@ -224,38 +233,25 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Disconnect BT Printer (safe & minimal)
   const handleBtDisconnect = async () => {
     try {
       await btPrinterService.disconnect();
     } catch (e) {
       console.warn("BT disconnect error", e);
-    } finally {
+    } fontFinally: {
       setBtConnected(false);
     }
   };
 
-  // Delete session from history (and its transactions)
   const deleteSessionFromHistory = (sessionId: string) => {
-    console.log("[DeleteShift] click", sessionId);
-
     const sess = sessions.find(x => x.id === sessionId);
-    if (!sess) {
-      console.warn("[DeleteShift] session not found", sessionId);
-      alert("Shift niet gevonden (check console).");
-      return;
-    }
+    if (!sess) return;
 
-    const ok = confirm(
-      `Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${
-        sess.endTime ? new Date(sess.endTime).toLocaleDateString('nl-NL') : ''
-      }\n\nLet op: bijhorende tickets van deze shift worden ook verwijderd.`
-    );
+    const ok = confirm(`Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${sess.endTime ? new Date(sess.endTime).toLocaleDateString('nl-NL') : ''}`);
     if (!ok) return;
 
     setSessions(prev => prev.filter(s => s.id !== sessionId));
     setTransactions(prev => prev.filter(t => t.sessionId !== sessionId));
-
     if (previewSession?.id === sessionId) setPreviewSession(null);
   };
 
@@ -279,16 +275,11 @@ export default function App() {
     else finalizePayment(PaymentMethod.CASH);
   };
 
-  // Stock verlagen op basis van verkochte items
   const applyStockReduction = (items: CartItem[]) => {
     setProducts(prev =>
       prev.map(p => {
-        const soldQty = items
-          .filter(i => i.id === p.id)
-          .reduce((sum, i) => sum + (i.quantity || 0), 0);
-
+        const soldQty = items.filter(i => i.id === p.id).reduce((sum, i) => sum + (i.quantity || 0), 0);
         if (soldQty <= 0) return p;
-
         const currentStock = Number.isFinite(p.stock as any) ? (p.stock as number) : 0;
         return {
           ...p,
@@ -316,70 +307,78 @@ export default function App() {
 
     const now = Date.now();
     const activeStaff = selectedStaffName || company.sellerName || 'Medewerker';
-    const tx: Transaction = {
-      id: `TX-${now}`,
-      sessionId: currentSession!.id,
-      timestamp: now,
-      dateStr: new Date(now).toLocaleDateString('nl-NL'),
-      items: [...cart],
-      subtotal: totals.sub,
-      vat0: totals.v0,
-      vatHigh: totals.vHigh,
-      total: totals.total,
-      paymentMethod: method,
-      salesmanName: activeStaff,
-      updatedAt: now
+    
+    const ticketPayload = {
+      ticket: {
+        user: activeStaff,
+        payment_method: method,
+        total_amount: totals.total,
+        items: cart.map(item => ({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          vatRate: item.vatRate
+        }))
+      }
     };
 
-    // Optimistic: direct stock lokaal verlagen (snappy UI)
-    applyStockReduction(cart);
-
-    // Locals meteen bijwerken
-    setTransactions(prev => [tx, ...prev]);
-    setCart([]);
-    setShowSuccess(true);
-
-    // Server: sale push + daarna delta pull (authoritative stock!)
     try {
-      await apiService.serverPushSale(tx);
+      const response = await fetch('/pos-data/save_ticket.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ticketPayload)
+      });
 
-      const delta = await apiService.serverPullDelta();
+      const result = await response.json();
 
-      if (delta?.products?.length) {
-        setProducts(prev => mergeByIdNewest(prev, delta.products).slice(0, 10));
-      }
-      if (delta?.transactions?.length) {
-        setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
-      }
-      if (delta?.sessions?.length) {
-        setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
-      }
-      if (delta?.company) {
-        setCompany(delta.company as any);
+      if (result.status === 'success') {
+        applyStockReduction(cart);
+
+        const tx: Transaction = {
+          id: result.ticket_id,
+          sessionId: currentSession?.id || result.shift_id,
+          timestamp: now,
+          dateStr: new Date(now).toLocaleDateString('nl-NL'),
+          items: [...cart],
+          subtotal: totals.sub,
+          vat0: totals.v0,
+          vatHigh: totals.vHigh,
+          total: totals.total,
+          paymentMethod: method,
+          salesmanName: activeStaff,
+          updatedAt: now
+        };
+
+        setTransactions(prev => [tx, ...prev]);
+        setCart([]);
+        setShowSuccess(true);
+
+        if (btConnected) {
+          try { await btPrinterService.printReceipt(tx, company); }
+          catch (e) { console.warn("BT Print error", e); }
+        }
+
+        setTimeout(() => {
+          setShowSuccess(false);
+          setPreviewTransaction(tx);
+        }, 1000);
+      } else {
+        alert("Fout bij opslaan ticket: " + result.message);
       }
     } catch (e) {
-      console.warn("Server sale sync/pull failed", e);
+      console.error("Netwerkfout bij opslaan ticket", e);
+      alert("Kon het ticket niet opslaan op de server.");
     }
-
-    if (btConnected) {
-      try { await btPrinterService.printReceipt(tx, company); }
-      catch (e) { console.warn("BT Print error", e); }
-    }
-
-    setTimeout(() => {
-      setShowSuccess(false);
-      setPreviewTransaction(tx);
-    }, 1000);
   };
 
   const closeSession = (counted: number) => {
     if (!currentSession) return;
 
     const sessionTx = transactions.filter(t => t.sessionId === currentSession.id);
-
     const totalSales = sessionTx.reduce((s, t) => s + (t.total || 0), 0);
-    const cashTotal  = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((s, t) => s + (t.total || 0), 0);
-    const cardTotal  = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((s, t) => s + (t.total || 0), 0);
+    const cashTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((s, t) => s + (t.total || 0), 0);
+    const cardTotal = sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((s, t) => s + (t.total || 0), 0);
 
     const prodCounts: Record<string, number> = {};
     sessionTx.forEach(t => {
@@ -410,29 +409,11 @@ export default function App() {
       updatedAt: Date.now(),
     };
 
-    // 1) Eerst state-updates (hier mag niets kunnen crashen)
     setSessions(prev => [closed, ...prev.filter(s => s.id !== currentSession.id)]);
     setPreviewSession(closed);
     setCurrentSession(null);
     setIsClosingSession(false);
     setActiveTab('REPORTS');
-
-    // 2) Side-effects veilig (mag falen zonder UI te blokkeren)
-    (async () => {
-      try {
-        await apiService.serverPushSession(closed as any);
-      } catch (e) {
-        console.warn("Server session CLOSE sync failed", e);
-      }
-
-      if (btConnected) {
-        try {
-          await btPrinterService.printSessionReport(closed, sessionTx, company);
-        } catch (e) {
-          console.warn("BT session print failed", e);
-        }
-      }
-    })();
   };
 
   const addStaff = () => {
@@ -472,9 +453,7 @@ export default function App() {
     setProducts(prev => prev.filter(p => p.id !== productId));
   };
 
-  // -------------------------
   // UI: MODE SELECTION
-  // -------------------------
   if (!activeMode) {
     return (
       <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-center space-y-12">
@@ -500,9 +479,7 @@ export default function App() {
     );
   }
 
-  // -------------------------
   // UI: LOGIN
-  // -------------------------
   if (!isAuthenticated) {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center p-6">
@@ -549,9 +526,7 @@ export default function App() {
     );
   }
 
-  // -------------------------
   // UI: MAIN APP
-  // -------------------------
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50 overflow-hidden font-sans select-none">
       <header className="h-14 bg-slate-950 flex items-center justify-between px-6 shrink-0 z-50">
@@ -560,7 +535,6 @@ export default function App() {
             type="button"
             onClick={() => { if (btConnected) handleBtDisconnect(); else btPrinterService.connect(); }}
             className="flex items-center gap-2"
-            title={btConnected ? "Verbreek printer verbinding" : "Verbind printer"}
           >
             <div className={`w-2 h-2 rounded-full ${btConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} />
             <span className="text-white/50 text-[9px] font-bold uppercase tracking-widest hover:text-white transition-colors">
@@ -571,8 +545,8 @@ export default function App() {
 
         <div className="flex items-center gap-4 text-white">
           <div className="flex items-center gap-3">
-            <div className={`transition-all duration-500 p-1.5 rounded-full ${
-              syncStatus === 'SYNCING' ? 'bg-indigo-500 sync-pulse' :
+            <div className={`p-1.5 rounded-full ${
+              syncStatus === 'SYNCING' ? 'bg-indigo-500' :
               syncStatus === 'SUCCESS' ? 'bg-emerald-500' :
               syncStatus === 'ERROR' ? 'bg-rose-500' : 'bg-white/10'
             }`}>
@@ -603,15 +577,6 @@ export default function App() {
       </nav>
 
       <main className="flex-1 overflow-hidden relative">
-        {isInitialLoading && (
-          <div className="absolute inset-0 z-[500] bg-white/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 size={32} className="animate-spin text-indigo-500" />
-              <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest font-bold">Data Laden...</span>
-            </div>
-          </div>
-        )}
-
         {activeTab === 'POS' && (
           <div className="h-full flex flex-col">
             {!currentSession ? (
@@ -631,22 +596,15 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => {
-                      const sess = {
+                      const sess: SalesSession = {
                         id: `SES-${Date.now()}`,
                         startTime: Date.now(),
                         startCash: parseFloat(startFloatAmount) || 0,
-                        status: 'OPEN' as const,
+                        status: 'OPEN',
                         updatedAt: Date.now()
                       };
-
                       setCurrentSession(sess);
                       setSessions(prev => [sess, ...prev]);
-
-                      try {
-                        apiService.serverPushSession(sess as any);
-                      } catch (e) {
-                        console.warn("Server session OPEN sync failed", e);
-                      }
                     }}
                     className="w-full bg-slate-950 text-white py-5 rounded-3xl font-bold uppercase shadow-xl hover:bg-slate-800 active:scale-95 transition-all"
                   >
@@ -658,7 +616,7 @@ export default function App() {
               <>
                 <div className="h-[35%] bg-white border-b flex flex-col overflow-y-auto p-4 space-y-2 relative shadow-inner custom-scrollbar">
                   <div className="flex justify-between items-center mb-2 sticky top-0 bg-white z-10 py-1">
-                    <button onClick={() => setShowSalesmanSelection(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-sm active:scale-95 transition-all font-bold">
+                    <button onClick={() => setShowSalesmanSelection(true)} className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-sm font-bold">
                       <User size={12} /> {selectedStaffName || company.sellerName || "Selecteer Medewerker"} <ChevronDown size={12} />
                     </button>
                     {cart.length > 0 && <button onClick={() => setCart([])} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={18} /></button>}
@@ -667,7 +625,7 @@ export default function App() {
                   {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center opacity-10 py-10"><ShoppingBag size={48} /></div>
                   ) : cart.map(item => (
-                    <div key={item.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-[1.25rem] border border-slate-200 animate-in slide-in-from-right-4">
+                    <div key={item.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-[1.25rem] border border-slate-200">
                       <div className="flex-1">
                         <div className="font-bold text-xs text-slate-800">{item.name}</div>
                         <div className="text-[9px] text-slate-400 font-mono font-bold">€{item.price.toFixed(2)} | BTW {item.vatRate}%</div>
@@ -697,7 +655,7 @@ export default function App() {
                       className={`${p.color || 'bg-white'} rounded-2xl border-b-2 border-black/10 p-2 h-24 flex flex-col items-center justify-center text-center active:scale-95 transition-all shadow-sm group relative overflow-hidden`}
                     >
                       <span className="text-[10px] font-black leading-tight text-slate-900 mb-1 line-clamp-2 font-bold">{p.name}</span>
-                      <span className="text-[9px] font-bold text-slate-950 bg-white/40 px-1.5 py-0.5 rounded-full font-mono border border-black/5 font-bold">€{p.price.toFixed(2)}</span>
+                      <span className="text-[9px] font-bold text-slate-950 bg-white/40 px-1.5 py-0.5 rounded-full font-mono border border-black/5">€{p.price.toFixed(2)}</span>
                     </button>
                   ))}
                 </div>
@@ -708,14 +666,14 @@ export default function App() {
                       <div className="text-[10px] text-white/40 font-black uppercase tracking-[0.2em] mb-1 font-bold">Totaal</div>
                       <div className="text-4xl font-black font-mono tracking-tighter tabular-nums font-bold">€{totals.total.toFixed(2)}</div>
                     </div>
-                    <div className="text-[10px] text-white/30 font-bold uppercase font-bold">BTW Incl.</div>
+                    <div className="text-[10px] text-white/30 font-bold uppercase">BTW Incl.</div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <button onClick={() => initiatePayment(PaymentMethod.CASH)} disabled={cart.length === 0} className="bg-emerald-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-emerald-800 font-bold">
                       <Banknote size={20} /> Contant
                     </button>
                     <button onClick={() => initiatePayment(PaymentMethod.CARD)} disabled={cart.length === 0} className="bg-sky-600 text-white h-16 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 transition-all border-b-4 border-sky-800 font-bold">
-                      <CreditCard size={20} /> Kaart
+                      <CreditCard size={20} /> Bancontact
                     </button>
                   </div>
                 </div>
@@ -724,49 +682,35 @@ export default function App() {
           </div>
         )}
 
+        {/* REPORST TAB */}
         {activeTab === 'REPORTS' && (
-          <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
-            <h2 className="text-2xl font-black tracking-tighter font-bold">Shift Historiek</h2>
-
-            {currentSession && (
-              <div className="bg-white p-7 rounded-[2.5rem] shadow-xl border-l-[10px] border-amber-500 flex justify-between items-center">
-                <div>
-                  <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest font-bold">Actieve Shift</div>
-                  <div className="text-3xl font-black font-mono text-amber-500 font-bold">
-                    €{transactions.filter(t => t.sessionId === currentSession.id).reduce((s, t) => s + t.total, 0).toFixed(2)}
-                  </div>
-                </div>
-                <button onClick={() => setIsClosingSession(true)} className="bg-rose-500 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 border-b-4 border-rose-700 font-bold">
-                  Sluiten
+          <div className="p-6 overflow-y-auto h-full space-y-6 pb-28">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-slate-900">Historiek & Shifts</h2>
+              {currentSession && (
+                <button onClick={() => setIsClosingSession(true)} className="bg-rose-500 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg">
+                  Sluit Huidige Shift
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
             <div className="space-y-4">
-              {sessions.filter(s => s.status === 'CLOSED').map(s => (
-                <div key={s.id} className="bg-white p-6 rounded-[2rem] flex flex-col shadow-sm border border-slate-100 group transition-all">
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-4 items-center">
-                      <div className="bg-slate-100 p-3.5 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-all">
-                        <Calendar size={20} />
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm text-slate-800">{new Date(s.endTime!).toLocaleDateString('nl-NL')}</div>
-                        <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter font-bold">ID: {s.id.slice(-8)}</div>
-                      </div>
+              {sessions.map(s => (
+                <div key={s.id} className="bg-white p-5 rounded-2xl border shadow-sm flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-sm text-slate-900">Shift #{s.id.slice(-6)}</div>
+                    <div className="text-xs text-slate-400 font-mono">
+                      {new Date(s.startTime).toLocaleDateString('nl-NL')} {new Date(s.startTime).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-emerald-600 font-mono text-xl font-bold">€{(s.summary?.totalSales || 0).toFixed(2)}</div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase font-bold">{s.summary?.transactionCount} tickets</div>
+                    <div className="mt-1 flex gap-2">
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${s.status === 'OPEN' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {s.status}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-50">
-                    <button onClick={() => setPreviewSession(s)} className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-100 transition-all">
-                      <ReceiptIcon size={14} /> Bekijk Rapport
-                    </button>
-                    <button onClick={() => deleteSessionFromHistory(s.id)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-all">
-                      <Trash2 size={14} /> Verwijder
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => deleteSessionFromHistory(s.id)} className="p-2 text-slate-300 hover:text-rose-500">
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
@@ -775,339 +719,120 @@ export default function App() {
           </div>
         )}
 
+        {/* SETTINGS TAB */}
         {activeTab === 'SETTINGS' && (
-          <div className="h-full overflow-y-auto p-6 space-y-8 pb-32 custom-scrollbar">
-            <h2 className="text-2xl font-black tracking-tighter font-bold">Systeem Beheer</h2>
-
-            {/* Cloud Sync Setup */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-indigo-50 text-indigo-500 p-3 rounded-2xl">
-                    <Cloud size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-800">Cloud Sync & Backup</h3>
-                    <p className="text-[10px] text-slate-400 font-bold">Synchroniseer gegevens tussen toestellen</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3 pt-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-bold">Sync Key ID</label>
-                  <input
-                    type="text"
-                    value={cloudConfig.syncId || ''}
-                    onChange={e => setCloudConfig({ ...cloudConfig, syncId: e.target.value })}
-                    placeholder="Voer unieke sync ID in..."
-                    className="w-full bg-slate-50 border p-3 rounded-xl font-mono text-xs outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <button onClick={() => performSync('PUSH')} className="flex-1 bg-indigo-50 text-indigo-600 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2">
-                    <Cloud size={14} /> Push
-                  </button>
-                  <button onClick={() => performSync('PULL')} className="flex-1 bg-slate-100 text-slate-600 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2">
-                    <RefreshCcw size={14} /> Pull
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Medewerkers Beheer */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-amber-50 text-amber-500 p-3 rounded-2xl">
-                  <User size={20} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-800">Medewerkers</h3>
-                  <p className="text-[10px] text-slate-400 font-bold">Beheer wie kassa verkopen kan uitvoeren</p>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newStaffName}
-                  onChange={e => setNewStaffName(e.target.value)}
-                  placeholder="Naam medewerker..."
-                  className="flex-1 bg-slate-50 border p-3 rounded-xl text-xs outline-none focus:border-indigo-500 font-bold"
-                />
-                <button onClick={addStaff} className="bg-slate-900 text-white px-4 rounded-xl text-xs font-bold flex items-center gap-1">
-                  <UserPlus size={14} /> Toevoegen
-                </button>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                {(company.salesmen || []).map(name => (
-                  <div key={name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-xs font-bold text-slate-700">{name}</span>
-                    <button onClick={() => removeStaff(name)} className="text-slate-300 hover:text-rose-500 transition-colors p-1">
-                      <UserMinus size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Producten Beheer */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-emerald-50 text-emerald-500 p-3 rounded-2xl">
-                    <Package size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-800">Producten</h3>
-                    <p className="text-[10px] text-slate-400 font-bold">Aanbod en prijzen aanpassen</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setEditingProduct({ id: `PROD-${Date.now()}`, name: '', price: 0, vatRate: 21, stock: 100, color: 'bg-white' })}
-                  className="bg-emerald-500 text-white p-2 rounded-xl"
-                >
+          <div className="p-6 overflow-y-auto h-full space-y-8 pb-28">
+            <h2 className="text-2xl font-bold text-slate-900">Beheer & Instellingen</h2>
+            
+            {/* Products management */}
+            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-lg text-slate-900">Producten</h3>
+                <button onClick={() => setEditingProduct({ id: `PROD-${Date.now()}`, name: '', price: 0, vatRate: 21, color: 'bg-white' })} className="p-2 bg-slate-950 text-white rounded-xl">
                   <Plus size={18} />
                 </button>
               </div>
-
-              <div className="space-y-2">
+              <div className="divide-y">
                 {products.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div key={p.id} className="py-3 flex justify-between items-center">
                     <div>
-                      <div className="text-xs font-bold text-slate-800">{p.name}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">€{p.price.toFixed(2)} | Voorraad: {p.stock ?? 'N/A'}</div>
+                      <div className="font-bold text-sm">{p.name}</div>
+                      <div className="text-xs text-slate-400">€{p.price.toFixed(2)} (BTW {p.vatRate}%)</div>
                     </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => setEditingProduct(p)} className="p-2 text-slate-400 hover:text-indigo-500"><Edit2 size={16} /></button>
-                      <button onClick={() => handleDeleteProduct(p.id)} className="p-2 text-slate-400 hover:text-rose-500"><Trash2 size={16} /></button>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingProduct(p)} className="p-1.5 text-slate-400 hover:text-slate-900"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDeleteProduct(p.id)} className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Bedrijfsgegevens */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-sky-50 text-sky-500 p-3 rounded-2xl">
-                  <Building2 size={20} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-800">Bedrijfsgegevens</h3>
-                  <p className="text-[10px] text-slate-400 font-bold">Informatie op kasticket</p>
-                </div>
+            {/* Staff Management */}
+            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+              <h3 className="font-bold text-lg text-slate-900">Medewerkers</h3>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Naam medewerker..."
+                  value={newStaffName}
+                  onChange={e => setNewStaffName(e.target.value)}
+                  className="flex-1 border p-3 rounded-xl text-sm"
+                />
+                <button onClick={addStaff} className="bg-slate-950 text-white px-4 rounded-xl font-bold text-sm">
+                  Toevoegen
+                </button>
               </div>
-
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={company.name}
-                  onChange={e => setCompany({ ...company, name: e.target.value, updatedAt: Date.now() })}
-                  placeholder="Bedrijfsnaam..."
-                  className="w-full bg-slate-50 border p-3 rounded-xl text-xs outline-none font-bold"
-                />
-                <input
-                  type="text"
-                  value={company.vatNumber}
-                  onChange={e => setCompany({ ...company, vatNumber: e.target.value, updatedAt: Date.now() })}
-                  placeholder="BTW-nummer..."
-                  className="w-full bg-slate-50 border p-3 rounded-xl text-xs outline-none font-bold"
-                />
-                <input
-                  type="text"
-                  value={company.address}
-                  onChange={e => setCompany({ ...company, address: e.target.value, updatedAt: Date.now() })}
-                  placeholder="Adres..."
-                  className="w-full bg-slate-50 border p-3 rounded-xl text-xs outline-none font-bold"
-                />
+              <div className="flex flex-wrap gap-2 pt-2">
+                {(company.salesmen || []).map(s => (
+                  <span key={s} className="bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2">
+                    {s}
+                    <button onClick={() => removeStaff(s)} className="text-slate-400 hover:text-rose-500"><X size={12} /></button>
+                  </span>
+                ))}
               </div>
-            </div>
-
-            {/* System Actions */}
-            <div className="pt-4 flex gap-3">
-              <button onClick={() => exportData('PRODUCTS')} className="flex-1 bg-slate-100 text-slate-600 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2">
-                <Download size={14} /> Export Prod.
-              </button>
-              <button onClick={handleResetToDefaults} className="flex-1 bg-rose-50 text-rose-600 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2">
-                <RotateCcw size={14} /> Reset Data
-              </button>
             </div>
           </div>
         )}
       </main>
 
-      {/* MODAL: Select Salesman */}
+      {/* STAFF MODAL */}
       {showSalesmanSelection && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 animate-in zoom-in-95">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-xl text-slate-900">Selecteer Medewerker</h3>
-              <button onClick={() => setShowSalesmanSelection(false)} className="text-slate-300 hover:text-slate-600"><X size={20} /></button>
-            </div>
-            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-              {(company.salesmen || []).map(s => (
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white p-8 rounded-3xl max-w-xs w-full space-y-4 text-center">
+            <h3 className="font-bold text-xl">Kies Medewerker</h3>
+            <div className="space-y-2">
+              {(company.salesmen || [company.sellerName || 'Medewerker']).map(staff => (
                 <button
-                  key={s}
-                  onClick={() => {
-                    setSelectedStaffName(s);
-                    setCompany({ ...company, sellerName: s, updatedAt: Date.now() });
-                    setShowSalesmanSelection(false);
-                  }}
-                  className={`w-full p-4 rounded-2xl border text-left font-bold text-sm flex items-center justify-between transition-all ${
-                    (selectedStaffName || company.sellerName) === s ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-700'
-                  }`}
+                  key={staff}
+                  onClick={() => { setSelectedStaffName(staff); setShowSalesmanSelection(false); }}
+                  className="w-full p-4 bg-slate-50 border-2 rounded-2xl font-bold hover:border-indigo-500 active:scale-95 transition-all text-left flex justify-between items-center"
                 >
-                  <span>{s}</span>
-                  {(selectedStaffName || company.sellerName) === s && <CheckCircle size={16} className="text-indigo-600" />}
+                  {staff}
+                  {selectedStaffName === staff && <CheckCircle size={18} className="text-indigo-500" />}
                 </button>
               ))}
             </div>
+            <button onClick={() => setShowSalesmanSelection(false)} className="text-slate-400 text-xs font-bold uppercase tracking-wider pt-2">Anuleren</button>
           </div>
         </div>
       )}
 
-      {/* MODAL: Card Payment Confirmation */}
-      {isPendingCardConfirmation && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full text-center space-y-6 animate-in zoom-in-95">
-            <CreditCard size={48} className="text-sky-500 mx-auto" />
-            <div>
-              <h3 className="font-bold text-2xl text-slate-900">Kaartbetaling</h3>
-              <p className="text-slate-400 text-xs mt-1">Ontvang €{totals.total.toFixed(2)} op de betaalterminal</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setIsPendingCardConfirmation(false)} className="bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl text-xs uppercase">
-                Annuleren
-              </button>
-              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="bg-sky-600 text-white font-bold py-4 rounded-2xl text-xs uppercase shadow-lg">
-                Bevestigen
-              </button>
-            </div>
-          </div>
+      {/* SUCCESS MODAL */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-[300] bg-emerald-500 flex flex-col items-center justify-center text-white space-y-4 animate-in zoom-in-95">
+          <CheckCircle size={80} className="animate-bounce" />
+          <h2 className="text-3xl font-black uppercase tracking-tight">Betaling Ontvangen!</h2>
         </div>
       )}
 
-      {/* MODAL: Close Session */}
-      {isClosingSession && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 animate-in zoom-in-95">
-            <h3 className="font-bold text-xl text-slate-900">Shift Sluiten</h3>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Geteld Geld Kassa (€)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={endCashInput}
-                onChange={e => setEndCashInput(e.target.value)}
-                placeholder="0.00"
-                className="w-full bg-slate-50 border-2 p-4 rounded-2xl font-bold text-2xl outline-none focus:border-rose-500 text-center"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setIsClosingSession(false)} className="bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl text-xs uppercase">
-                Annuleren
-              </button>
-              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="bg-rose-600 text-white font-bold py-4 rounded-2xl text-xs uppercase shadow-lg">
-                Sluit Shift
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Edit Product */}
+      {/* EDIT PRODUCT MODAL */}
       {editingProduct && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <form onSubmit={handleSaveProduct} className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-4 animate-in zoom-in-95">
-            <h3 className="font-bold text-xl text-slate-900 mb-2">Product Bewerken</h3>
+        <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <form onSubmit={handleSaveProduct} className="bg-white p-6 rounded-3xl max-w-sm w-full space-y-4">
+            <h3 className="font-bold text-lg">Product Bewerken</h3>
             <input
               type="text"
-              required
+              placeholder="Productnaam"
               value={editingProduct.name}
               onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-              placeholder="Productnaam..."
-              className="w-full bg-slate-50 border p-3 rounded-xl text-xs font-bold outline-none"
+              className="w-full border p-3 rounded-xl text-sm"
+              required
             />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={editingProduct.price || ''}
-                onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-                placeholder="Prijs (€)..."
-                className="w-full bg-slate-50 border p-3 rounded-xl text-xs font-bold outline-none"
-              />
-              <input
-                type="number"
-                value={editingProduct.stock ?? ''}
-                onChange={e => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })}
-                placeholder="Voorraad..."
-                className="w-full bg-slate-50 border p-3 rounded-xl text-xs font-bold outline-none"
-              />
-            </div>
-
-            <div className="grid grid-cols-5 gap-2 pt-2">
-              {AVAILABLE_COLORS.map(color => (
-                <button
-                  type="button"
-                  key={color}
-                  onClick={() => setEditingProduct({ ...editingProduct, color })}
-                  className={`h-8 rounded-lg ${color} border ${editingProduct.color === color ? 'border-slate-900 ring-2 ring-slate-900' : 'border-slate-200'}`}
-                />
-              ))}
-            </div>
-
-            <div className="flex gap-2 pt-4">
-              <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-3 rounded-xl text-xs uppercase">
-                Annuleren
-              </button>
-              <button type="submit" className="flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs uppercase shadow-md">
-                Opslaan
-              </button>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Prijs (€)"
+              value={editingProduct.price || ''}
+              onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
+              className="w-full border p-3 rounded-xl text-sm"
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 text-xs font-bold text-slate-400">Annuleren</button>
+              <button type="submit" className="px-4 py-2 bg-slate-950 text-white rounded-xl text-xs font-bold">Opslaan</button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* MODAL: Preview Receipt / Session */}
-      {(previewTransaction || previewSession) && (
-        <div className="fixed inset-0 z-[700] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-6 max-w-sm w-full space-y-4 max-h-[90vh] flex flex-col justify-between animate-in zoom-in-95">
-            <div className="overflow-y-auto custom-scrollbar p-2">
-              {previewTransaction && <Receipt transaction={previewTransaction} company={company} />}
-              {previewSession && (
-                <div className="space-y-4 text-xs font-mono">
-                  <div className="text-center border-b pb-3">
-                    <h4 className="font-bold text-base">{company.name}</h4>
-                    <p>Shift Rapport #{previewSession.id.slice(-8)}</p>
-                    <p>{new Date(previewSession.endTime!).toLocaleString('nl-NL')}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between"><span>Totale Omzet:</span><span>€{(previewSession.summary?.totalSales || 0).toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span>Contant Ontvangen:</span><span>€{(previewSession.summary?.cashTotal || 0).toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span>Kaart Ontvangen:</span><span>€{(previewSession.summary?.cardTotal || 0).toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span>Start Kassa:</span><span>€{(previewSession.startCash || 0).toFixed(2)}</span></div>
-                    <div className="flex justify-between font-bold border-t pt-1"><span>Verwacht Contant:</span><span>€{(previewSession.expectedCash || 0).toFixed(2)}</span></div>
-                    <div className="flex justify-between font-bold"><span>Geteld Contant:</span><span>€{(previewSession.endCash || 0).toFixed(2)}</span></div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <button onClick={() => { setPreviewTransaction(null); setPreviewSession(null); }} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl text-xs uppercase">
-              Sluiten
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Toast Notification */}
-      {showSuccess && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[800] bg-emerald-500 text-white px-6 py-3 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest flex items-center gap-2 animate-in fade-in slide-in-from-top-4">
-          <CheckCircle size={16} /> Transactie Verwerkt
         </div>
       )}
     </div>
