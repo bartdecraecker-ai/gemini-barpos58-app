@@ -111,7 +111,7 @@ export const apiService = {
     }
   },
 
-  async serverPushSession(session: SalesSession): Promise<boolean> {
+async serverPushSession(session: SalesSession | null): Promise<boolean> {
     try {
       const res = await fetch(`${SERVER_URL}?action=push_session`, {
         method: 'POST',
@@ -124,7 +124,7 @@ export const apiService = {
       return false;
     }
   },
-
+  
   // Handmatige Push/Pull knoppen in de UI
   async pushToCloud(config: CloudConfig, products: Product[], company: CompanyDetails): Promise<boolean> {
     const mode = this.getActiveMode();
