@@ -637,49 +637,32 @@ export default function App() {
             <h2 className="text-2xl font-black tracking-tighter">Shift Historiek</h2>
 
             {currentSession && (
-              <div className="bg-white p-7 rounded-[2.5rem] shadow-xl border-l-[10px] border-amber-500 flex justify-between items-center">
-                <div>
-                  <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Actieve Shift</div>
-                  <div className="text-3xl font-black font-mono text-amber-500">
-                    €{transactions.filter(t => t.sessionId === currentSession.id).reduce((s, t) => s + t.total, 0).toFixed(2)}
+              <div className="bg-white p-7 rounded-[2.5rem] shadow-xl border-l-[10px] border-amber-500">
+                <div className="flex justify-between items-center gap-4">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                      Actieve Shift
+                    </div>
+                    <div className="text-3xl font-black font-mono text-amber-500">
+                      €{transactions
+                        .filter(t => t.sessionId === currentSession.id)
+                        .reduce((sum, t) => sum + (t.total || 0), 0)
+                        .toFixed(2)}
+                    </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEndCashInput('');
+                      setIsClosingSession(true);
+                    }}
+                    className="flex items-center justify-center gap-2 px-5 py-3 bg-rose-500 text-white rounded-xl font-black text-xs uppercase shadow-lg hover:bg-rose-600 transition-all active:scale-95 whitespace-nowrap"
+                  >
+                    <Lock size={16} />
+                    Shift sluiten
+                  </button>
                 </div>
-<button 
-  onClick={() => {
-    // 1. Haal alle transacties voor deze shift op
-    const sessionTx = transactions.filter(t => t.sessionId === s.id);
-
-    // 2. Bereken de gegevens dynamisch als de summary nog niet bestaat
-    const totalSales = s.summary?.totalSales ?? sessionTx.reduce((sum, t) => sum + (t.total || 0), 0);
-    const cashTotal = s.summary?.cashTotal ?? sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((sum, t) => sum + (t.total || 0), 0);
-    const cardTotal = s.summary?.cardTotal ?? sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((sum, t) => sum + (t.total || 0), 0);
-    
-    const prodCounts: Record<string, number> = {};
-    sessionTx.forEach(t => {
-      (t.items || []).forEach(i => {
-        const name = i?.name || 'Onbekend';
-        prodCounts[name] = (prodCounts[name] || 0) + (i.quantity || 0);
-      });
-    });
-
-    // 3. Stuur een compleet object naar het preview-modal
-    setPreviewSession({
-      ...s,
-      summary: s.summary || {
-        totalSales,
-        transactionCount: sessionTx.length,
-        cashTotal,
-        cardTotal,
-        vat0Total: sessionTx.reduce((sum, t) => sum + (t.vat0 || 0), 0),
-        vatHighTotal: sessionTx.reduce((sum, t) => sum + (t.vatHigh || 0), 0),
-        productSales: prodCounts
-      }
-    });
-  }} 
-  className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
->
-  Rapport
-</button>
               </div>
             )}
 
@@ -1064,4 +1047,3 @@ export default function App() {
     </div>
   );
 }
-      
