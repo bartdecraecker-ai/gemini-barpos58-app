@@ -644,9 +644,42 @@ export default function App() {
                     €{transactions.filter(t => t.sessionId === currentSession.id).reduce((s, t) => s + t.total, 0).toFixed(2)}
                   </div>
                 </div>
-                <button onClick={() => setIsClosingSession(true)} className="bg-rose-500 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase shadow-lg active:scale-95 border-b-4 border-rose-700 font-bold">
-                  Sluiten
-                </button>
+<button 
+  onClick={() => {
+    // 1. Haal alle transacties voor deze shift op
+    const sessionTx = transactions.filter(t => t.sessionId === s.id);
+
+    // 2. Bereken de gegevens dynamisch als de summary nog niet bestaat
+    const totalSales = s.summary?.totalSales ?? sessionTx.reduce((sum, t) => sum + (t.total || 0), 0);
+    const cashTotal = s.summary?.cashTotal ?? sessionTx.filter(t => t.paymentMethod === PaymentMethod.CASH).reduce((sum, t) => sum + (t.total || 0), 0);
+    const cardTotal = s.summary?.cardTotal ?? sessionTx.filter(t => t.paymentMethod === PaymentMethod.CARD).reduce((sum, t) => sum + (t.total || 0), 0);
+    
+    const prodCounts: Record<string, number> = {};
+    sessionTx.forEach(t => {
+      (t.items || []).forEach(i => {
+        const name = i?.name || 'Onbekend';
+        prodCounts[name] = (prodCounts[name] || 0) + (i.quantity || 0);
+      });
+    });
+
+    // 3. Stuur een compleet object naar het preview-modal
+    setPreviewSession({
+      ...s,
+      summary: s.summary || {
+        totalSales,
+        transactionCount: sessionTx.length,
+        cashTotal,
+        cardTotal,
+        vat0Total: sessionTx.reduce((sum, t) => sum + (t.vat0 || 0), 0),
+        vatHighTotal: sessionTx.reduce((sum, t) => sum + (t.vatHigh || 0), 0),
+        productSales: prodCounts
+      }
+    });
+  }} 
+  className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
+>
+  Rapport
+</button>
               </div>
             )}
 
@@ -1018,6 +1051,85 @@ export default function App() {
         </div>
       )}
 
+{/* ========================================================= */}
+      {/* ⬇️ HIER PLATS JE STAP 2 (HET SHIFT RAPPORT MODAL) ⬇️      */}
+      {/* ========================================================= */}
+      {previewSession && (
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Z-Rapport / Shift Details</h3>
+                <p className="text-[10px] font-mono text-slate-400">ID: {previewSession.id}</p>
+              </div>
+              <button onClick={() => setPreviewSession(null)} className="p-1 text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3 font-mono text-xs border-b pb-4">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Datum:</span>
+                <span className="font-bold">{new Date(previewSession.endTime || previewSession.startTime).toLocaleDateString('nl-NL')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Totaal Omzet:</span>
+                <span className="font-bold text-emerald-600">€{(previewSession.summary?.totalSales || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Contant Ontvangen:</span>
+                <span>€{(previewSession.summary?.cashTotal || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Kaart Ontvangen:</span>
+                <span>€{(previewSession.summary?.cardTotal || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Aantal Transacties:</span>
+                <span>{previewSession.summary?.transactionCount || 0}</span>
+              </div>
+            </div>
+
+            {/* Productverkopen specificatie uit Stap 2 */}
+            {previewSession.summary?.productSales && Object.keys(previewSession.summary.productSales).length > 0 ? (
+              <div className="space-y-1 text-xs pt-2">
+                <span className="font-bold text-[10px] uppercase text-slate-400 block mb-1">Verkochte Producten:</span>
+                {Object.entries(previewSession.summary.productSales).map(([name, qty]) => (
+                  <div key={name} className="flex justify-between text-slate-700 py-0.5 border-b border-slate-50">
+                    <span>{name}</span>
+                    <span className="font-bold font-mono">x{qty}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[10px] text-slate-400 italic text-center py-2">Nog geen producten verkocht in deze shift.</div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-3">
+              <button
+                onClick={async () => {
+                  if (btConnected) {
+                    const sessionTx = transactions.filter(t => t.sessionId === previewSession.id);
+                    await btPrinterService.printSessionReport(previewSession, sessionTx, company);
+                  } else {
+                    alert("Geen Bluetooth printer verbonden.");
+                  }
+                }}
+                className="p-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-md active:scale-95"
+              >
+                <Printer size={16} /> Afdrukken
+              </button>
+              <button
+                onClick={() => setPreviewSession(null)}
+                className="p-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs uppercase"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* SUCCESS OVERLAY */}
       {showSuccess && (
         <div className="fixed inset-0 z-[1000] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in-90">
