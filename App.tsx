@@ -50,7 +50,6 @@ export default function App() {
   const themeAccent = activeMode === 'SHOP' ? 'text-amber-500' : 'text-indigo-500';
 
   useEffect(() => {
-    // Always launch with startpage (mode selection)
     setActiveMode(null);
 
     const interval = setInterval(() => {
@@ -102,7 +101,7 @@ export default function App() {
       setCurrentSession(openS || null);
     } catch (err) {
       console.error("Data Load Error:", err);
-    } fontinally {
+    } finally {
       setIsInitialLoading(false);
     }
   };
@@ -188,14 +187,8 @@ export default function App() {
   };
 
   const deleteSessionFromHistory = (sessionId: string) => {
-    console.log("[DeleteShift] click", sessionId);
-
     const sess = sessions.find(x => x.id === sessionId);
-    if (!sess) {
-      console.warn("[DeleteShift] session not found", sessionId);
-      alert("Shift niet gevonden (check console).");
-      return;
-    }
+    if (!sess) return;
 
     const ok = confirm(
       `Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${
@@ -694,97 +687,133 @@ export default function App() {
           <div className="h-full overflow-y-auto p-6 space-y-8 pb-32 custom-scrollbar">
             <h2 className="text-2xl font-black tracking-tighter">Systeem Beheer</h2>
 
-            {/* Cloud Config */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3">
-                <Cloud size={20} className={themeAccent} />
-                <h3 className="font-bold text-sm uppercase tracking-wider">Cloud Synchronisatie</h3>
-              </div>
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Sync ID (bv. shop-123)"
-                  value={cloudConfig.syncId || ''}
-                  onChange={e => setCloudConfig({ ...cloudConfig, syncId: e.target.value })}
-                  className="w-full bg-slate-50 border p-3 rounded-xl font-mono text-xs outline-none"
-                />
-                <div className="flex gap-2">
-                  <button onClick={() => performSync('PUSH')} className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase">
-                    Upload (Push)
-                  </button>
-                  <button onClick={() => performSync('PULL')} className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs uppercase">
-                    Download (Pull)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Product Beheer */}
+            {/* PRODUCTEN BEHEER */}
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="font-bold text-sm uppercase tracking-wider">Producten ({products.length}/10)</h3>
-                <button onClick={() => exportData('PRODUCTS')} className="text-slate-400 hover:text-slate-600">
-                  <Download size={16} />
+                <h3 className="font-bold text-lg text-slate-900">Producten Aanpassen</h3>
+                <button
+                  onClick={() => setEditingProduct({ id: `PRD-${Date.now()}`, name: '', price: 0, vatRate: 21, color: 'bg-white', stock: 100 })}
+                  className="p-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs flex items-center gap-1"
+                >
+                  <Plus size={16} /> Nieuw Product
                 </button>
               </div>
-              <div className="space-y-2">
+
+              <div className="grid grid-cols-1 gap-2">
                 {products.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <div key={p.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <div>
                       <div className="font-bold text-xs">{p.name}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">€{p.price.toFixed(2)} | Voorraad: {p.stock ?? '∞'}</div>
+                      <div className="text-[10px] text-slate-400">€{p.price.toFixed(2)} - Stock: {p.stock ?? '∞'}</div>
                     </div>
-                    <button onClick={() => setEditingProduct(p)} className="p-2 text-slate-400 hover:text-indigo-500">
-                      <Edit2 size={16} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingProduct(p)} className="p-2 text-slate-400 hover:text-indigo-600">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => setProducts(products.filter(x => x.id !== p.id))} className="p-2 text-slate-400 hover:text-rose-600">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Medewerkers */}
+            {/* MEDEWERKERS BEHEER */}
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="font-bold text-sm uppercase tracking-wider">Medewerkers</h3>
+              <h3 className="font-bold text-lg text-slate-900">Medewerkers</h3>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Naam medewerker"
+                  placeholder="Naam medewerker..."
                   value={newStaffName}
                   onChange={e => setNewStaffName(e.target.value)}
-                  className="flex-1 bg-slate-50 border p-3 rounded-xl text-xs outline-none"
+                  className="flex-1 bg-slate-50 border p-3 rounded-xl text-sm font-bold outline-none"
                 />
-                <button onClick={addStaff} className="bg-indigo-500 text-white px-4 rounded-xl font-bold text-xs">
-                  <Plus size={16} />
-                </button>
+                <button onClick={addStaff} className="bg-slate-900 text-white px-4 rounded-xl font-bold text-xs">Toevoegen</button>
               </div>
+
               <div className="flex flex-wrap gap-2">
                 {(company.salesmen || []).map(s => (
-                  <span key={s} className="bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2">
+                  <span key={s} className="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2">
                     {s}
-                    <button onClick={() => removeStaff(s)} className="text-slate-400 hover:text-red-500"><X size={12} /></button>
+                    <button onClick={() => removeStaff(s)} className="text-slate-400 hover:text-rose-600"><X size={12} /></button>
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* System Actions */}
-            <div className="pt-4 border-t space-y-3">
-              <button onClick={handleResetToDefaults} className="w-full bg-rose-50 text-rose-600 py-3 rounded-xl font-bold text-xs uppercase">
-                Reset naar Standaardinstellingen
+            {/* BEDRIJFSGEGEVENS */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <h3 className="font-bold text-lg text-slate-900">Bedrijfsgegevens</h3>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={company.name}
+                  onChange={e => setCompany({ ...company, name: e.target.value })}
+                  placeholder="Bedrijfsnaam"
+                  className="w-full bg-slate-50 border p-3 rounded-xl text-sm font-bold"
+                />
+                <input
+                  type="text"
+                  value={company.vatNumber}
+                  onChange={e => setCompany({ ...company, vatNumber: e.target.value })}
+                  placeholder="BTW Nummer"
+                  className="w-full bg-slate-50 border p-3 rounded-xl text-sm font-bold"
+                />
+                <input
+                  type="text"
+                  value={company.address}
+                  onChange={e => setCompany({ ...company, address: e.target.value })}
+                  placeholder="Adres"
+                  className="w-full bg-slate-50 border p-3 rounded-xl text-sm font-bold"
+                />
+              </div>
+            </div>
+
+            {/* CLOUD CONFIGURATION */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <h3 className="font-bold text-lg text-slate-900">Cloud Sync</h3>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={cloudConfig.syncId || ''}
+                  onChange={e => setCloudConfig({ ...cloudConfig, syncId: e.target.value })}
+                  placeholder="Sync ID Key"
+                  className="w-full bg-slate-50 border p-3 rounded-xl text-sm font-bold font-mono"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600">Automatische Sync</span>
+                  <input
+                    type="checkbox"
+                    checked={cloudConfig.isAutoSync}
+                    onChange={e => setCloudConfig({ ...cloudConfig, isAutoSync: e.target.checked })}
+                    className="w-5 h-5 accent-indigo-600 rounded"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button onClick={() => performSync('PUSH')} className="bg-indigo-50 text-indigo-600 p-3 rounded-xl text-xs font-bold">Push naar Cloud</button>
+                  <button onClick={() => performSync('PULL')} className="bg-amber-50 text-amber-600 p-3 rounded-xl text-xs font-bold">Pull van Cloud</button>
+                </div>
+              </div>
+            </div>
+
+            {/* RESET BUTTON */}
+            <div className="pt-4">
+              <button onClick={handleResetToDefaults} className="w-full bg-rose-50 text-rose-600 p-4 rounded-2xl font-bold text-xs uppercase border border-rose-100">
+                Herstel Standaardinstellingen
               </button>
             </div>
           </div>
         )}
       </main>
 
-      {/* MODALS & OVERLAYS */}
-
-      {/* Staff Selection Modal */}
+      {/* MODAL: VERKOPER SELECTIE */}
       {showSalesmanSelection && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-6 rounded-[2.5rem] max-w-xs w-full space-y-4">
-            <h3 className="font-bold text-center text-lg">Selecteer Medewerker</h3>
-            <div className="space-y-2">
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-6 animate-in zoom-in-95">
+            <h3 className="font-bold text-xl text-center">Selecteer Verkoper</h3>
+            <div className="grid grid-cols-1 gap-2">
               {(company.salesmen || []).map(s => (
                 <button
                   key={s}
@@ -792,131 +821,117 @@ export default function App() {
                     setCompany({ ...company, sellerName: s });
                     setShowSalesmanSelection(false);
                   }}
-                  className="w-full p-4 bg-slate-50 hover:bg-indigo-50 rounded-2xl font-bold text-xs text-left"
+                  className="p-4 bg-slate-50 rounded-2xl text-left font-bold text-slate-800 hover:bg-indigo-500 hover:text-white transition-all"
                 >
                   {s}
                 </button>
               ))}
             </div>
-            <button onClick={() => setShowSalesmanSelection(false)} className="w-full text-slate-400 text-xs font-bold uppercase py-2">
+            <button onClick={() => setShowSalesmanSelection(false)} className="w-full text-slate-400 font-bold text-xs py-2">
               Annuleren
             </button>
           </div>
         </div>
       )}
 
-      {/* Close Shift Modal */}
+      {/* MODAL: SHIFT SLUITEN */}
       {isClosingSession && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[2.5rem] max-w-xs w-full space-y-6">
-            <h3 className="font-bold text-center text-xl">Shift Sluiten</h3>
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-6">
+            <h3 className="font-bold text-xl text-center">Shift Sluiten</h3>
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase text-center block">Geteld Kasgeld (€)</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block text-center">Geteld Kasgeld (€)</label>
               <input
                 type="number"
                 step="0.01"
                 value={endCashInput}
                 onChange={e => setEndCashInput(e.target.value)}
-                className="w-full bg-slate-50 border-2 p-4 rounded-2xl font-bold text-2xl text-center outline-none"
+                className="w-full bg-slate-50 border-2 p-4 rounded-2xl font-bold text-2xl text-center outline-none focus:border-rose-500"
               />
             </div>
-            <div className="space-y-2">
-              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="w-full bg-rose-500 text-white py-4 rounded-2xl font-bold uppercase shadow-lg">
-                Bevestig Sluiting
-              </button>
-              <button onClick={() => setIsClosingSession(false)} className="w-full text-slate-400 text-xs font-bold uppercase py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setIsClosingSession(false)} className="p-4 bg-slate-100 rounded-2xl font-bold text-slate-500 text-xs uppercase">
                 Annuleren
+              </button>
+              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="p-4 bg-rose-500 text-white rounded-2xl font-bold text-xs uppercase shadow-lg">
+                Bevestigen
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Product Edit Modal */}
+      {/* MODAL: PRODUCT BEWERKEN */}
       {editingProduct && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-6 rounded-[2.5rem] max-w-xs w-full space-y-4">
-            <h3 className="font-bold text-center text-lg">Product Bewerken</h3>
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={editingProduct.name}
-                onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                className="w-full bg-slate-50 border p-3 rounded-xl text-xs"
-                placeholder="Naam"
-              />
-              <input
-                type="number"
-                step="0.01"
-                value={editingProduct.price}
-                onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-                className="w-full bg-slate-50 border p-3 rounded-xl text-xs"
-                placeholder="Prijs"
-              />
-              <input
-                type="number"
-                value={editingProduct.stock ?? ''}
-                onChange={e => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })}
-                className="w-full bg-slate-50 border p-3 rounded-xl text-xs"
-                placeholder="Voorraad"
-              />
-            </div>
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4">
+            <h3 className="font-bold text-lg">Product Bewerken</h3>
+            <input
+              type="text"
+              value={editingProduct.name}
+              onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
+              placeholder="Productnaam"
+              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
+            />
+            <input
+              type="number"
+              step="0.01"
+              value={editingProduct.price}
+              onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
+              placeholder="Prijs (€)"
+              className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-sm"
+            />
             <div className="flex gap-2">
+              {AVAILABLE_COLORS.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setEditingProduct({ ...editingProduct, color: c })}
+                  className={`w-8 h-8 rounded-full border-2 ${c} ${editingProduct.color === c ? 'border-indigo-600 scale-110' : 'border-transparent'}`}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button onClick={() => setEditingProduct(null)} className="p-3 bg-slate-100 rounded-xl font-bold text-xs">Annuleren</button>
               <button
                 onClick={() => {
-                  setProducts(products.map(p => p.id === editingProduct.id ? editingProduct : p));
+                  setProducts(prev => {
+                    const exists = prev.some(x => x.id === editingProduct.id);
+                    if (exists) return prev.map(x => x.id === editingProduct.id ? editingProduct : x);
+                    return [...prev, editingProduct];
+                  });
                   setEditingProduct(null);
                 }}
-                className="flex-1 bg-indigo-500 text-white py-3 rounded-xl font-bold text-xs uppercase"
+                className="p-3 bg-indigo-600 text-white rounded-xl font-bold text-xs"
               >
                 Opslaan
               </button>
-              <button onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-bold text-xs uppercase">
-                Annuleren
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Card Confirmation Modal */}
-      {isPendingCardConfirmation && (
-        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white p-8 rounded-[2.5rem] max-w-xs w-full text-center space-y-6">
-            <CreditCard size={48} className="text-sky-500 mx-auto animate-bounce" />
-            <div>
-              <h3 className="font-bold text-xl">Kaartbetaling</h3>
-              <p className="text-xs text-slate-400 mt-1">Ontvang €{totals.total.toFixed(2)} op de terminal</p>
-            </div>
-            <div className="space-y-2">
-              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="w-full bg-emerald-500 text-white py-4 rounded-2xl font-bold uppercase shadow-lg">
-                Betaling Gelukt
-              </button>
-              <button onClick={() => setIsPendingCardConfirmation(false)} className="w-full text-slate-400 text-xs font-bold uppercase py-2">
-                Annuleren
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Success Animation Overlay */}
-      {showSuccess && (
-        <div className="fixed inset-0 z-[1000] bg-emerald-500 flex items-center justify-center text-white animate-in zoom-in-95">
-          <div className="text-center space-y-4">
-            <CheckCircle size={80} className="mx-auto" />
-            <h2 className="text-3xl font-black uppercase tracking-wider">Betaald!</h2>
-          </div>
-        </div>
-      )}
-
-      {/* Preview Modals for Receipts */}
+      {/* MODAL: TRANSACTION PREVIEW / RECEIPT */}
       {previewTransaction && (
-        <Receipt
-          transaction={previewTransaction}
-          company={company}
-          onClose={() => setPreviewTransaction(null)}
-        />
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm">Kassabon Preview</h3>
+              <button onClick={() => setPreviewTransaction(null)}><X size={18} /></button>
+            </div>
+            <Receipt transaction={previewTransaction} company={company} />
+            <button onClick={() => setPreviewTransaction(null)} className="w-full p-3 bg-slate-900 text-white rounded-xl font-bold text-xs">
+              Sluiten
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS OVERLAY */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-[1000] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in-90">
+          <CheckCircle size={80} className="animate-bounce" />
+          <h2 className="text-3xl font-black mt-4 uppercase tracking-wider">Betaling Gelukt</h2>
+        </div>
       )}
     </div>
   );
