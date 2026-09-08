@@ -6,7 +6,7 @@
   "website": "www.krauker.be",
   "sellerName": "Bart",
   "salesmen": ["Bart", "Tina"],
-  "footerMessage": "Dankjewel voor je aankoop!",
+  "footerMessage": "Dankjewel voor je aankoop !",
   "masterPassword": "1984",
   "updatedAt": 1715424000000
 }
