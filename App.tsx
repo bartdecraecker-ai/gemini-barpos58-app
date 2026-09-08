@@ -150,7 +150,7 @@ export default function App() {
   };
 
   const handleResetToDefaults = async () => {
-    if (!confirm("Weet u zeker dat u de standaardgegevens voor deze modus wilt laden? Lokale aanpassingen gaan verloren.")) return;
+    if (!confirm("Weet je zeker dat u de standaardgegevens voor deze modus wilt laden? Lokale aanpassingen gaan verloren.")) return;
     setIsInitialLoading(true);
     const data = await apiService.resetToDefaults();
     if (data) {
