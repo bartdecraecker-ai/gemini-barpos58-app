@@ -353,7 +353,7 @@ export class BluetoothPrinterService {
     if (t.salesmanName) {
       lines.push(
         this.lineBytes(
-          `Bediende: ${t.salesmanName}`,
+          `Bediend door: ${t.salesmanName}`,
           "LEFT"
         )
       );
