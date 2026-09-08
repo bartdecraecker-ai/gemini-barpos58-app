@@ -124,6 +124,34 @@ export default function App() {
     }
   }, [products, company, transactions, sessions, cloudConfig, isAuthenticated, activeMode, isInitialLoading]);
 
+// Automatisch de nieuwste status ophalen van de server/cloud
+useEffect(() => {
+  if (!isAuthenticated || !activeMode) return;
+
+  const syncWithServer = async () => {
+    try {
+      const delta = await apiService.serverPullDelta();
+      if (delta?.sessions?.length) {
+        setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
+        
+        // Zoek of er nu een actieve sessie open staat op de cloud
+        const openSession = delta.sessions.find((s: any) => s.status === 'OPEN');
+        if (openSession) {
+          setCurrentSession(openSession);
+        }
+      }
+    } catch (e) {
+      console.warn("Automatische achtergrond-sync mislukt", e);
+    }
+  };
+
+  // Haal direct op en herhaal elke 5 seconden
+  syncWithServer();
+  const interval = setInterval(syncWithServer, 5000);
+
+  return () => clearInterval(interval);
+}, [isAuthenticated, activeMode]);
+  
   const performSync = async (type: 'PUSH' | 'PULL') => {
     if (!cloudConfig.syncId) return;
     setSyncStatus('SYNCING');
