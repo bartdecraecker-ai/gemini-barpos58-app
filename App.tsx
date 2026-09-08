@@ -139,15 +139,27 @@ useEffect(() => {
 
       // 2. Sync Sessies & Actieve Shift
       if (delta?.sessions?.length) {
-        setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
-        
-        const openSession = delta.sessions.find((s: any) => s.status === 'OPEN');
-        setCurrentSession(openSession || null);
+        setSessions(prev => {
+          const updatedSessions = mergeByIdNewest(prev, delta.sessions as any);
+          
+          // Zoek naar een actieve (OPEN) sessie in de bijgewerkte lijst
+          const activeSession = updatedSessions.find((s: any) => s.status === 'OPEN');
+          
+          if (activeSession) {
+            // Er is een open sessie -> zet deze als huidige sessie
+            setCurrentSession(activeSession);
+          } else if (updatedSessions.length > 0) {
+            // Er zijn sessies verwerkt, maar geen enkele is OPEN -> sluit huidige sessie
+            setCurrentSession(null);
+          }
+          
+          return updatedSessions;
+        });
       }
 
       // 3. Sync Producten & Voorraad
       if (delta?.products?.length) {
-        setProducts(prev => mergeByIdNewest(prev, delta.products as any).slice(0, 10));
+        setProducts(prev => mergeByIdNewest(prev, delta.products as any));
       }
 
       // 4. Sync Bedrijfsinstellingen
@@ -155,7 +167,7 @@ useEffect(() => {
         setCompany(delta.company as any);
       }
     } catch (e) {
-      console.warn("Achtergrond-sync van historiek mislukt:", e);
+      console.warn("Achtergrond-sync mislukt:", e);
     }
   };
 
