@@ -124,32 +124,34 @@ export default function App() {
     }
   }, [products, company, transactions, sessions, cloudConfig, isAuthenticated, activeMode, isInitialLoading]);
 
-// Volledige automatische achtergrond-sync (Sessies + Transacties/Historiek + Producten)
+// Volledige automatische achtergrond-sync met foutcontrole
 useEffect(() => {
   if (!isAuthenticated || !activeMode) return;
 
   const syncFullHistoryWithServer = async () => {
     try {
-      const delta = await apiService.serverPullDelta();
+      // 1. Haal de delta op van de server
+      const delta = await apiService.serverPullDelta(cloudConfig?.syncId);
       
-      // 1. Sync Transacties / Historiek
-      if (delta?.transactions?.length) {
-        setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
+      if (!delta) return;
+
+      // 2. Sync Transacties / Historiek
+      if (Array.isArray(delta.transactions) && delta.transactions.length > 0) {
+        setTransactions(prev => mergeByIdNewest(prev || [], delta.transactions as any));
       }
 
-      // 2. Sync Sessies & Actieve Shift
-      if (delta?.sessions?.length) {
+      // 3. Sync Sessies & Actieve Shift
+      if (Array.isArray(delta.sessions) && delta.sessions.length > 0) {
         setSessions(prev => {
-          const updatedSessions = mergeByIdNewest(prev, delta.sessions as any);
+          const updatedSessions = mergeByIdNewest(prev || [], delta.sessions as any);
           
-          // Zoek naar een actieve (OPEN) sessie in de bijgewerkte lijst
+          // Zoek naar een geopende sessie
           const activeSession = updatedSessions.find((s: any) => s.status === 'OPEN');
           
           if (activeSession) {
-            // Er is een open sessie -> zet deze als huidige sessie
             setCurrentSession(activeSession);
-          } else if (updatedSessions.length > 0) {
-            // Er zijn sessies verwerkt, maar geen enkele is OPEN -> sluit huidige sessie
+          } else if (updatedSessions.some((s: any) => s.status === 'CLOSED')) {
+            // Als er recent een sessie is gesloten en er is geen open sessie meer
             setCurrentSession(null);
           }
           
@@ -157,26 +159,28 @@ useEffect(() => {
         });
       }
 
-      // 3. Sync Producten & Voorraad
-      if (delta?.products?.length) {
-        setProducts(prev => mergeByIdNewest(prev, delta.products as any));
+      // 4. Sync Producten & Voorraad
+      if (Array.isArray(delta.products) && delta.products.length > 0) {
+        setProducts(prev => mergeByIdNewest(prev || [], delta.products as any));
       }
 
-      // 4. Sync Bedrijfsinstellingen
-      if (delta?.company) {
+      // 5. Sync Bedrijfsinstellingen
+      if (delta.company) {
         setCompany(delta.company as any);
       }
     } catch (e) {
-      console.warn("Achtergrond-sync mislukt:", e);
+      console.error("Achtergrond-sync fout:", e);
     }
   };
 
-  // Haal direct op bij het laden en herhaal elke 5 seconden
+  // Voer direct uit bij het opstarten
   syncFullHistoryWithServer();
+
+  // Herhaal elke 5 seconden
   const interval = setInterval(syncFullHistoryWithServer, 5000);
 
   return () => clearInterval(interval);
-}, [isAuthenticated, activeMode]);
+}, [isAuthenticated, activeMode, cloudConfig?.syncId]);
   
   const performSync = async (type: 'PUSH' | 'PULL') => {
     if (!cloudConfig.syncId) return;
