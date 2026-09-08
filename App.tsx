@@ -124,64 +124,49 @@ export default function App() {
     }
   }, [products, company, transactions, sessions, cloudConfig, isAuthenticated, activeMode, isInitialLoading]);
 
-// Volledige automatische achtergrond-sync met foutcontrole
-useEffect(() => {
-  if (!isAuthenticated || !activeMode) return;
+  // Volledige automatische achtergrond-sync met foutcontrole
+  useEffect(() => {
+    if (!isAuthenticated || !activeMode) return;
 
-  const syncFullHistoryWithServer = async () => {
-    try {
-      // 1. Haal de delta op van de server
-      const delta = await apiService.serverPullDelta(cloudConfig?.syncId);
-      
-      if (!delta) return;
+    const syncFullHistoryWithServer = async () => {
+      try {
+        const delta = await apiService.serverPullDelta(cloudConfig?.syncId);
+        if (!delta) return;
 
-      // 2. Sync Transacties / Historiek
-      if (Array.isArray(delta.transactions) && delta.transactions.length > 0) {
-        setTransactions(prev => mergeByIdNewest(prev || [], delta.transactions as any));
+        if (Array.isArray(delta.transactions) && delta.transactions.length > 0) {
+          setTransactions(prev => mergeByIdNewest(prev || [], delta.transactions as any));
+        }
+
+        if (Array.isArray(delta.sessions) && delta.sessions.length > 0) {
+          setSessions(prev => {
+            const updatedSessions = mergeByIdNewest(prev || [], delta.sessions as any);
+            const activeSession = updatedSessions.find((s: any) => s.status === 'OPEN');
+            if (activeSession) {
+              setCurrentSession(activeSession);
+            } else if (updatedSessions.some((s: any) => s.status === 'CLOSED')) {
+              setCurrentSession(null);
+            }
+            return updatedSessions;
+          });
+        }
+
+        if (Array.isArray(delta.products) && delta.products.length > 0) {
+          setProducts(prev => mergeByIdNewest(prev || [], delta.products as any));
+        }
+
+        if (delta.company) {
+          setCompany(delta.company as any);
+        }
+      } catch (e) {
+        console.error("Achtergrond-sync fout:", e);
       }
+    };
 
-      // 3. Sync Sessies & Actieve Shift
-      if (Array.isArray(delta.sessions) && delta.sessions.length > 0) {
-        setSessions(prev => {
-          const updatedSessions = mergeByIdNewest(prev || [], delta.sessions as any);
-          
-          // Zoek naar een geopende sessie
-          const activeSession = updatedSessions.find((s: any) => s.status === 'OPEN');
-          
-          if (activeSession) {
-            setCurrentSession(activeSession);
-          } else if (updatedSessions.some((s: any) => s.status === 'CLOSED')) {
-            // Als er recent een sessie is gesloten en er is geen open sessie meer
-            setCurrentSession(null);
-          }
-          
-          return updatedSessions;
-        });
-      }
+    syncFullHistoryWithServer();
+    const interval = setInterval(syncFullHistoryWithServer, 5000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, activeMode, cloudConfig?.syncId]);
 
-      // 4. Sync Producten & Voorraad
-      if (Array.isArray(delta.products) && delta.products.length > 0) {
-        setProducts(prev => mergeByIdNewest(prev || [], delta.products as any));
-      }
-
-      // 5. Sync Bedrijfsinstellingen
-      if (delta.company) {
-        setCompany(delta.company as any);
-      }
-    } catch (e) {
-      console.error("Achtergrond-sync fout:", e);
-    }
-  };
-
-  // Voer direct uit bij het opstarten
-  syncFullHistoryWithServer();
-
-  // Herhaal elke 5 seconden
-  const interval = setInterval(syncFullHistoryWithServer, 5000);
-
-  return () => clearInterval(interval);
-}, [isAuthenticated, activeMode, cloudConfig?.syncId]);
-  
   const performSync = async (type: 'PUSH' | 'PULL') => {
     if (!cloudConfig.syncId) return;
     setSyncStatus('SYNCING');
@@ -235,7 +220,7 @@ useEffect(() => {
     URL.revokeObjectURL(url);
   };
 
- const handleBtDisconnect = async () => {
+  const handleBtDisconnect = async () => {
     try {
       await btPrinterService.disconnect();
     } catch (e) {
@@ -245,7 +230,6 @@ useEffect(() => {
     }
   };
 
-  
   const deleteSessionFromHistory = (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
     if (!sess) {
@@ -711,175 +695,111 @@ useEffect(() => {
               </div>
             )}
 
-            <div className="space-y-4">
-              {sessions.filter(s => s.status === 'CLOSED').map(s => (
-                <div key={s.id} className="bg-white p-6 rounded-[2rem] flex flex-col shadow-sm border border-slate-100 group transition-all">
-                  <div className="flex justify-between items-start">
-                    <div className="flex gap-4 items-center">
-                      <div className="bg-slate-100 p-3.5 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-all">
-                        <Calendar size={20} />
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm text-slate-800 font-bold">{new Date(s.endTime!).toLocaleDateString('nl-NL')}</div>
-                        <div className="text-[10px] text-slate-400 uppercase font-black tracking-tighter font-bold">ID: {s.id.slice(-8)}</div>
+            <div className="space-y-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Afgesloten Shifts</span>
+              {sessions.filter(s => s.status === 'CLOSED').length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-3xl text-slate-400 text-xs font-bold">Nog geen afgesloten shifts beschikbaar</div>
+              ) : (
+                sessions.filter(s => s.status === 'CLOSED').map(sess => (
+                  <div key={sess.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-800 text-sm">Shift {sess.id.slice(-6)}</div>
+                      <div className="text-[10px] text-slate-400 font-bold">
+                        {sess.endTime ? new Date(sess.endTime).toLocaleString('nl-NL') : 'Onbekend'}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-black text-emerald-600 font-mono text-xl font-bold">€{(s.summary?.totalSales || 0).toFixed(2)}</div>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase font-bold">{s.summary?.transactionCount} tickets</div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-slate-900 text-sm">€{sess.summary?.totalSales?.toFixed(2) || '0.00'}</span>
+                      <button onClick={() => setPreviewSession(sess)} className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200">
+                        <ReceiptIcon size={16} />
+                      </button>
+                      <button onClick={() => deleteSessionFromHistory(sess.id)} className="p-2 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100">
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-50">
-                    <button onClick={() => setPreviewSession(s)} className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-xl font-bold text-[10px] uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all font-bold">
-                      <ReceiptIcon size={14} /> Rapport
-                    </button>
-                    <button onClick={() => deleteSessionFromHistory(s.id)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-[10px] uppercase hover:bg-rose-500 hover:text-white transition-all font-bold">
-                      <Trash2 size={14} /> Verwijder
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
 
         {/* TAB 3: SETTINGS */}
         {activeTab === 'SETTINGS' && (
-          <div className="h-full overflow-y-auto p-6 space-y-8 pb-32 custom-scrollbar">
-            <h2 className="text-2xl font-black tracking-tighter">Instellingen & Beheer</h2>
+          <div className="h-full overflow-y-auto p-6 space-y-6 pb-24 custom-scrollbar">
+            <h2 className="text-2xl font-black tracking-tighter font-bold">Beheer & Instellingen</h2>
 
-            {/* Bedrijfsgegevens */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <Building2 size={16} /> Bedrijfsinformatie
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  placeholder="Bedrijfsnaam"
-                  value={company.name}
-                  onChange={e => setCompany({ ...company, name: e.target.value, updatedAt: Date.now() })}
-                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
-                />
-                <input
-                  type="text"
-                  placeholder="Adres"
-                  value={company.address}
-                  onChange={e => setCompany({ ...company, address: e.target.value, updatedAt: Date.now() })}
-                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
-                />
-                <input
-                  type="text"
-                  placeholder="BTW-nummer"
-                  value={company.vatNumber}
-                  onChange={e => setCompany({ ...company, vatNumber: e.target.value, updatedAt: Date.now() })}
-                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
-                />
-                <input
-                  type="password"
-                  placeholder="Master PIN (Default: 1984)"
-                  value={company.masterPassword || ''}
-                  onChange={e => setCompany({ ...company, masterPassword: e.target.value, updatedAt: Date.now() })}
-                  className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
-                />
-              </div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Bedrijfsgegevens</span>
+              <input
+                type="text"
+                value={company.name}
+                onChange={e => setCompany({ ...company, name: e.target.value, updatedAt: Date.now() })}
+                placeholder="Bedrijfsnaam"
+                className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-xs"
+              />
+              <input
+                type="text"
+                value={company.vatNumber}
+                onChange={e => setCompany({ ...company, vatNumber: e.target.value, updatedAt: Date.now() })}
+                placeholder="BTW Nummer"
+                className="w-full bg-slate-50 border p-3 rounded-xl font-bold text-xs"
+              />
             </div>
 
-            {/* Medewerkers Beheren */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <UserPlus size={16} /> Medewerkers
-              </h3>
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Medewerkers</span>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Naam medewerker"
                   value={newStaffName}
                   onChange={e => setNewStaffName(e.target.value)}
-                  className="flex-1 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-sm font-bold outline-none focus:border-indigo-500"
+                  placeholder="Naam medewerker"
+                  className="flex-1 bg-slate-50 border p-3 rounded-xl font-bold text-xs"
                 />
-                <button onClick={addStaff} className="bg-slate-900 text-white px-6 rounded-2xl font-bold active:scale-95 transition-all">
-                  Toevoegen
+                <button onClick={addStaff} className="bg-indigo-600 text-white px-4 rounded-xl font-bold text-xs">
+                  <UserPlus size={16} />
                 </button>
               </div>
               <div className="flex flex-wrap gap-2 pt-2">
-                {(company.salesmen || []).map(name => (
-                  <span key={name} className="bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
-                    {name}
-                    <button onClick={() => removeStaff(name)} className="text-slate-400 hover:text-red-500">
-                      <X size={14} />
-                    </button>
+                {(company.salesmen || []).map(s => (
+                  <span key={s} className="bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
+                    {s}
+                    <button onClick={() => removeStaff(s)} className="text-slate-400 hover:text-red-500"><UserMinus size={12} /></button>
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* Producten Beheer */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                  <Package size={16} /> Producten (Max 10)
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {products.map(p => (
-                  <div key={p.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-sm text-slate-900">{p.name}</div>
-                      <div className="text-xs text-slate-400 font-mono">€{p.price.toFixed(2)} | BTW {p.vatRate}%</div>
-                    </div>
-                    <button onClick={() => setEditingProduct(p)} className="p-2.5 bg-white rounded-xl text-slate-600 shadow-sm border hover:bg-slate-100 active:scale-95">
-                      <Edit2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Data & Backups */}
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                <Globe size={16} /> Data & Cloud Acties
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button onClick={() => performSync('PUSH')} className="p-4 bg-indigo-50 text-indigo-600 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-indigo-100 active:scale-95">
-                  <Cloud size={16} /> Push Naar Cloud
-                </button>
-                <button onClick={() => performSync('PULL')} className="p-4 bg-emerald-50 text-emerald-600 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-emerald-100 active:scale-95">
-                  <Download size={16} /> Pull Van Cloud
-                </button>
-                <button onClick={() => exportData('PRODUCTS')} className="p-4 bg-slate-100 text-slate-700 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-slate-200 active:scale-95">
-                  <Download size={16} /> Exporteer Producten JSON
-                </button>
-                <button onClick={handleResetToDefaults} className="p-4 bg-rose-50 text-rose-600 font-bold rounded-2xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-rose-100 active:scale-95">
-                  <RotateCcw size={16} /> Reset Naar Standaard
-                </button>
-              </div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Systeem Opties</span>
+              <button onClick={() => handleResetToDefaults()} className="w-full bg-rose-50 text-rose-600 p-3 rounded-xl font-bold text-xs text-left">
+                Herstel naar Standaard Instellingen
+              </button>
             </div>
           </div>
         )}
       </main>
 
-      {/* ------------------------- */}
-      {/* MODALS & OVERLAYS         */}
-      {/* ------------------------- */}
+      {/* MODALS */}
+      {showSyncModal && (
+        <SyncModal
+          config={cloudConfig}
+          onSave={(cfg) => { setCloudConfig(cfg); setShowSyncModal(false); }}
+          onClose={() => setShowSyncModal(false)}
+        />
+      )}
 
-      {/* MODAL: Verkoper Selectie */}
       {showSalesmanSelection && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
-            <User size={40} className="text-indigo-500 mx-auto" />
-            <h3 className="font-extrabold text-xl">Selecteer Verkoper</h3>
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[500] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 animate-in zoom-in-95">
+            <h3 className="font-extrabold text-lg text-slate-900">Selecteer Medewerker</h3>
             <div className="space-y-2">
-              {(company.salesmen || []).map(name => (
+              {(company.salesmen || ['Kassa Medewerker']).map(name => (
                 <button
                   key={name}
-                  onClick={() => {
-                    setCompany({ ...company, sellerName: name });
-                    setShowSalesmanSelection(false);
-                  }}
-                  className="w-full py-4 bg-slate-50 hover:bg-indigo-500 hover:text-white rounded-2xl font-bold text-slate-800 transition-all active:scale-95"
+                  onClick={() => { setCompany({ ...company, sellerName: name }); setShowSalesmanSelection(false); }}
+                  className="w-full p-4 bg-slate-50 border rounded-2xl text-left font-bold text-sm hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                 >
                   {name}
                 </button>
@@ -889,185 +809,48 @@ useEffect(() => {
         </div>
       )}
 
-      {/* MODAL: Bevestig Kaartbetaling */}
-      {isPendingCardConfirmation && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
-            <CreditCard size={48} className="text-sky-500 mx-auto animate-bounce" />
+      {isClosingSession && currentSession && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[500] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 animate-in zoom-in-95">
+            <h3 className="font-extrabold text-lg text-slate-900">Shift Sluiten</h3>
             <div>
-              <h3 className="font-extrabold text-2xl">Kaartbetaling</h3>
-              <p className="text-xs text-slate-400 mt-1">Ontvang €{totals.total.toFixed(2)} op de terminal</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setIsPendingCardConfirmation(false)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase active:scale-95">
-                Annuleren
-              </button>
-              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="py-4 bg-sky-600 text-white rounded-2xl font-bold text-xs uppercase shadow-lg active:scale-95">
-                Ontvangen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* OVERLAY: Betaling Geslaagd Success Indicator */}
-      {showSuccess && (
-        <div className="fixed inset-0 bg-emerald-500 z-[700] flex flex-col items-center justify-center text-white animate-in fade-in">
-          <CheckCircle size={80} className="animate-bounce mb-4" />
-          <h2 className="text-3xl font-black">Betaling Ontvangen!</h2>
-        </div>
-      )}
-
-      {/* MODAL: Product Bewerken */}
-      {editingProduct && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full space-y-6 animate-in zoom-in-95">
-            <h3 className="font-extrabold text-xl">Product Bewerken</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Naam</label>
-                <input
-                  type="text"
-                  value={editingProduct.name}
-                  onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full bg-slate-50 p-4 rounded-2xl border font-bold text-slate-800 outline-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Prijs (€)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editingProduct.price}
-                    onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-slate-50 p-4 rounded-2xl border font-bold text-slate-800 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">BTW Tarief (%)</label>
-                  <select
-                    value={editingProduct.vatRate}
-                    onChange={e => setEditingProduct({ ...editingProduct, vatRate: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-slate-50 p-4 rounded-2xl border font-bold text-slate-800 outline-none"
-                  >
-                    <option value={0}>0%</option>
-                    <option value={21}>21%</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-2">Kleur Knop</label>
-                <div className="flex gap-2">
-                  {AVAILABLE_COLORS.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setEditingProduct({ ...editingProduct, color: c })}
-                      className={`w-8 h-8 rounded-full ${c} border-2 ${editingProduct.color === c ? 'border-black scale-110' : 'border-transparent'}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setEditingProduct(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase">
-                Annuleren
-              </button>
-              <button
-                onClick={() => {
-                  setProducts(products.map(p => p.id === editingProduct.id ? { ...editingProduct, updatedAt: Date.now() } : p));
-                  setEditingProduct(null);
-                }}
-                className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase"
-              >
-                Opslaan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Shift Sluiten */}
-      {isClosingSession && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
-            <AlertCircle size={48} className="text-rose-500 mx-auto" />
-            <h3 className="font-extrabold text-2xl">Shift Sluiten</h3>
-            <div className="text-left space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase text-center block">Geteld Contant Geld in Kassa (€)</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Geteld Contant Geld in Kassa (€)</label>
               <input
                 type="number"
                 step="0.01"
-                placeholder="0.00"
                 value={endCashInput}
                 onChange={e => setEndCashInput(e.target.value)}
-                className="w-full bg-slate-50 border-2 p-5 rounded-3xl font-bold text-3xl outline-none text-center focus:border-rose-500"
+                className="w-full bg-slate-50 border p-4 rounded-2xl font-bold text-2xl outline-none"
+                placeholder="0.00"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setIsClosingSession(false)} className="py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase">
-                Annuleren
-              </button>
-              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="py-4 bg-rose-600 text-white rounded-2xl font-bold text-xs uppercase shadow-lg">
-                Sluiten
-              </button>
+            <div className="flex gap-3">
+              <button onClick={() => setIsClosingSession(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase">Annuleren</button>
+              <button onClick={() => closeSession(parseFloat(endCashInput) || 0)} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-bold text-xs uppercase shadow-lg">Sluiten</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: Preview Transaction Receipt */}
+      {isPendingCardConfirmation && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[500] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full space-y-6 text-center animate-in zoom-in-95">
+            <CreditCard size={48} className="mx-auto text-sky-600" />
+            <h3 className="font-extrabold text-lg text-slate-900">Kaartbetaling Bevestigen</h3>
+            <p className="text-slate-400 text-xs font-bold">Totaalbedrag: €{totals.total.toFixed(2)}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setIsPendingCardConfirmation(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-xs uppercase">Annuleren</button>
+              <button onClick={() => finalizePayment(PaymentMethod.CARD)} className="flex-1 py-4 bg-sky-600 text-white rounded-2xl font-bold text-xs uppercase shadow-lg">Betaald</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {previewTransaction && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-6 max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-slate-400">Kassabon Preview</h3>
-              <button onClick={() => setPreviewTransaction(null)} className="p-1 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <Receipt transaction={previewTransaction} company={company} />
-            </div>
-            <button onClick={() => setPreviewTransaction(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase">
-              Sluiten
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Preview Shift Session Report */}
-      {previewSession && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[600] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] p-6 max-w-sm w-full space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-slate-400">Shift Rapportage</h3>
-              <button onClick={() => setPreviewSession(null)} className="p-1 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-4 text-sm custom-scrollbar">
-              <div className="bg-slate-50 p-4 rounded-2xl space-y-2 font-mono text-xs">
-                <div className="flex justify-between"><span>Totaal Verkoop:</span><span className="font-bold">€{(previewSession.summary?.totalSales || 0).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Contant:</span><span>€{(previewSession.summary?.cashTotal || 0).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Kaart:</span><span>€{(previewSession.summary?.cardTotal || 0).toFixed(2)}</span></div>
-                <div className="flex justify-between border-t pt-2"><span>Verwacht Contant:</span><span>€{(previewSession.expectedCash || 0).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Geteld Contant:</span><span>€{(previewSession.endCash || 0).toFixed(2)}</span></div>
-              </div>
-            </div>
-            <button onClick={() => setPreviewSession(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-xs uppercase">
-              Sluiten
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Cloud Sync Config */}
-      {showSyncModal && (
-        <SyncModal
-          config={cloudConfig}
-          onSave={(cfg) => {
-            setCloudConfig(cfg);
-            apiService.setCloudConfig(cfg);
-            setShowSyncModal(false);
-          }}
-          onClose={() => setShowSyncModal(false)}
+        <Receipt
+          transaction={previewTransaction}
+          company={company}
+          onClose={() => setPreviewTransaction(null)}
         />
       )}
     </div>
