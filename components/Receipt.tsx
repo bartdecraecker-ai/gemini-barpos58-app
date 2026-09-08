@@ -59,7 +59,7 @@ export const Receipt: React.FC<ReceiptProps> = ({ transaction, company }) => {
 
         {transaction.salesmanName && (
           <div className="flex justify-between text-slate-500">
-            <span>Bediende:</span>
+            <span>Bediend door:</span>
             <span>{transaction.salesmanName}</span>
           </div>
         )}
