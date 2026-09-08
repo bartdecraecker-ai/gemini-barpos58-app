@@ -124,30 +124,44 @@ export default function App() {
     }
   }, [products, company, transactions, sessions, cloudConfig, isAuthenticated, activeMode, isInitialLoading]);
 
-// Automatisch de nieuwste status ophalen van de server/cloud
+// Volledige automatische achtergrond-sync (Sessies + Transacties/Historiek + Producten)
 useEffect(() => {
   if (!isAuthenticated || !activeMode) return;
 
-  const syncWithServer = async () => {
+  const syncFullHistoryWithServer = async () => {
     try {
       const delta = await apiService.serverPullDelta();
+      
+      // 1. Sync Transacties / Historiek
+      if (delta?.transactions?.length) {
+        setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
+      }
+
+      // 2. Sync Sessies & Actieve Shift
       if (delta?.sessions?.length) {
         setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
         
-        // Zoek of er nu een actieve sessie open staat op de cloud
         const openSession = delta.sessions.find((s: any) => s.status === 'OPEN');
-        if (openSession) {
-          setCurrentSession(openSession);
-        }
+        setCurrentSession(openSession || null);
+      }
+
+      // 3. Sync Producten & Voorraad
+      if (delta?.products?.length) {
+        setProducts(prev => mergeByIdNewest(prev, delta.products as any).slice(0, 10));
+      }
+
+      // 4. Sync Bedrijfsinstellingen
+      if (delta?.company) {
+        setCompany(delta.company as any);
       }
     } catch (e) {
-      console.warn("Automatische achtergrond-sync mislukt", e);
+      console.warn("Achtergrond-sync van historiek mislukt:", e);
     }
   };
 
-  // Haal direct op en herhaal elke 5 seconden
-  syncWithServer();
-  const interval = setInterval(syncWithServer, 5000);
+  // Haal direct op bij het laden en herhaal elke 5 seconden
+  syncFullHistoryWithServer();
+  const interval = setInterval(syncFullHistoryWithServer, 5000);
 
   return () => clearInterval(interval);
 }, [isAuthenticated, activeMode]);
