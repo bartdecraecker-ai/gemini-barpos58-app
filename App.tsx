@@ -1065,13 +1065,3 @@ export default function App() {
   );
 }
       
-      {/* SUCCESS OVERLAY */}
-      {showSuccess && (
-        <div className="fixed inset-0 z-[1000] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in-90">
-          <CheckCircle size={80} className="animate-bounce" />
-          <h2 className="text-3xl font-black mt-4 uppercase tracking-wider">Betaling Gelukt</h2>
-        </div>
-      )}
-    </div>
-  );
-}
