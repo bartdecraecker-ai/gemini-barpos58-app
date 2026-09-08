@@ -215,12 +215,12 @@ export default function App() {
   }, [cart]);
 
   const initiatePayment = (method: PaymentMethod) => {
-    if (!currentSession || cart.length === 0) return;
-    if (!company.sellerName) { setShowSalesmanSelection(true); return; }
+  if (!currentSession || cart.length === 0) return;
+  if (!company.sellerName) { setShowSalesmanSelection(true); return; }
 
-    if (method === PaymentMethod.CARD) setIsPendingCardConfirmation(true);
-    else finalizePayment(PaymentMethod.CASH);
-  };
+  // Direct afhandelen voor zowel Kaart als Contant
+  finalizePayment(method);
+};
 
   const applyStockReduction = (items: CartItem[]) => {
     setProducts(prev =>
@@ -926,6 +926,109 @@ export default function App() {
         </div>
       )}
 
+{/* MODAL: TRANSACTION PREVIEW / RECEIPT */}
+      {previewTransaction && (
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-sm">Kassabon Preview</h3>
+              <button onClick={() => setPreviewTransaction(null)}><X size={18} /></button>
+            </div>
+            <Receipt transaction={previewTransaction} company={company} />
+            <button onClick={() => setPreviewTransaction(null)} className="w-full p-3 bg-slate-900 text-white rounded-xl font-bold text-xs">
+              Sluiten
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* ⬇️ PLATS HIER HET SCRIPT VOOR PROBLEEM 2 (SHIFT RAPPORT) ⬇️ */}
+      {/* ========================================================= */}
+      {previewSession && (
+        <div className="fixed inset-0 z-[600] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Z-Rapport / Shift Details</h3>
+                <p className="text-[10px] font-mono text-slate-400">ID: {previewSession.id}</p>
+              </div>
+              <button onClick={() => setPreviewSession(null)} className="p-1 text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3 font-mono text-xs border-b pb-4">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Datum:</span>
+                <span className="font-bold">{new Date(previewSession.endTime || previewSession.startTime).toLocaleDateString('nl-NL')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Totaal Omzet:</span>
+                <span className="font-bold text-emerald-600">€{(previewSession.summary?.totalSales || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Contant Ontvangen:</span>
+                <span>€{(previewSession.summary?.cashTotal || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Kaart Ontvangen:</span>
+                <span>€{(previewSession.summary?.cardTotal || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Aantal Transacties:</span>
+                <span>{previewSession.summary?.transactionCount || 0}</span>
+              </div>
+            </div>
+
+            {previewSession.summary?.productSales && (
+              <div className="space-y-1 text-xs">
+                <span className="font-bold text-[10px] uppercase text-slate-400">Verkochte Producten:</span>
+                {Object.entries(previewSession.summary.productSales).map(([name, qty]) => (
+                  <div key={name} className="flex justify-between text-slate-700">
+                    <span>{name}</span>
+                    <span className="font-bold">x{qty}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-3">
+              <button
+                onClick={async () => {
+                  if (btConnected) {
+                    const sessionTx = transactions.filter(t => t.sessionId === previewSession.id);
+                    await btPrinterService.printSessionReport(previewSession, sessionTx, company);
+                  } else {
+                    alert("Geen Bluetooth printer verbonden.");
+                  }
+                }}
+                className="p-3 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 shadow-md active:scale-95"
+              >
+                <Printer size={16} /> Afdrukken
+              </button>
+              <button
+                onClick={() => setPreviewSession(null)}
+                className="p-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs uppercase"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUCCESS OVERLAY */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-[1000] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in-90">
+          <CheckCircle size={80} className="animate-bounce" />
+          <h2 className="text-3xl font-black mt-4 uppercase tracking-wider">Betaling Gelukt</h2>
+        </div>
+      )}
+    </div>
+  );
+}
+      
       {/* SUCCESS OVERLAY */}
       {showSuccess && (
         <div className="fixed inset-0 z-[1000] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in-90">
