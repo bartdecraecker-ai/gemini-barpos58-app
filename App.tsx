@@ -269,12 +269,12 @@ export default function App() {
           `Dit wijst op een server-side opslagprobleem in api.php/orders.json/deleted_sessions.json.`
         );
         // Laat serverhistoriek zien zodat we geen schijnbare lokale delete tonen.
-        setSessions(prev => reconcileSessionsFromServer(prev, serverSessions));
+        setSessions(prev => reconcileSessionsFromServer(prev, serverSessions, Array.isArray(delta.deleted_session_ids) ? delta.deleted_session_ids : []));
         return;
       }
 
       // Definitief reconciliëren met centrale waarheid.
-      setSessions(prev => reconcileSessionsFromServer(prev, serverSessions));
+      setSessions(prev => reconcileSessionsFromServer(prev, serverSessions, Array.isArray(delta.deleted_session_ids) ? delta.deleted_session_ids : []));
     } catch (e: any) {
       console.error('Delete shift error:', e);
       alert(
@@ -347,19 +347,19 @@ export default function App() {
   const pendingOpenKey = () => `barpos_pending_open_${activeMode || 'NONE'}`;
   const pendingCloseKey = () => `barpos_pending_close_${activeMode || 'NONE'}`;
 
-  // Voor gesloten shifthistoriek is de server de centrale waarheid.
-  // Een gewone merge kan een verwijderde shift nooit weghalen:
-  // als de server hem niet meer terugstuurt, blijft de lokale kopie bestaan.
-  const reconcileSessionsFromServer = (local: SalesSession[], incoming: SalesSession[]) => {
-    const serverIds = new Set(incoming.map(s => s.id));
-    const pendingCloseId = localStorage.getItem(pendingCloseKey());
+  // Behoud oudere lokale historiek, maar respecteer expliciete server-deletes.
+  // Sommige oude shifts bestonden alleen lokaal en stonden nooit in orders.json.
+  const reconcileSessionsFromServer = (
+    local: SalesSession[],
+    incoming: SalesSession[],
+    deletedSessionIds: string[] = []
+  ) => {
+    const deleted = new Set(deletedSessionIds);
 
-    const localToPreserve = local.filter(s =>
-      !serverIds.has(s.id) &&
-      (s.status === 'OPEN' || (pendingCloseId !== null && s.id === pendingCloseId))
-    );
+    const localFiltered = local.filter(s => !deleted.has(s.id));
+    const incomingFiltered = incoming.filter(s => !deleted.has(s.id));
 
-    return mergeByIdNewest(localToPreserve, incoming);
+    return mergeByIdNewest(localFiltered, incomingFiltered);
   };
 
   const syncCentralShift = async () => {
@@ -385,7 +385,7 @@ export default function App() {
       // shift gesloten is, is active_session = null terwijl delta.sessions
       // net de gesloten shift(s) bevat.
       if (Array.isArray(delta.sessions)) {
-        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[]));
+        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[], Array.isArray(delta.deleted_session_ids) ? delta.deleted_session_ids : []));
       }
 
       if (remoteSession) {
@@ -515,7 +515,7 @@ export default function App() {
         setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
       }
       if (Array.isArray(delta?.sessions)) {
-        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[]));
+        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[], Array.isArray(delta.deleted_session_ids) ? delta.deleted_session_ids : []));
       }
       if (delta?.company) {
         setCompany(delta.company as any);
