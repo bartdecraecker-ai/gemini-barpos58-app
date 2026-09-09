@@ -201,7 +201,7 @@ export default function App() {
 
   const deleteSessionFromHistory = async (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
-    if (!sess) return;
+    if (!sess || !activeMode) return;
 
     const ok = confirm(
       `Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${
@@ -210,27 +210,76 @@ export default function App() {
     );
     if (!ok) return;
 
-    // Eerst centraal verwijderen. Anders zou de 10-seconden-sync
-    // het lokaal verwijderde rapport opnieuw uit de serverhistoriek ophalen.
-    const deletedOnServer = await apiService.serverDeleteSession(sessionId);
-    if (!deletedOnServer) {
-      alert('Shift kon niet centraal verwijderd worden. Probeer opnieuw wanneer er verbinding is.');
-      return;
-    }
-
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
-    setTransactions(prev => prev.filter(t => t.sessionId !== sessionId));
-
-    if (previewSession?.id === sessionId) setPreviewSession(null);
-
-    // Meteen opnieuw de centrale waarheid ophalen.
     try {
-      const delta = await apiService.serverPullDelta();
-      if (Array.isArray(delta?.sessions)) {
-        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[]));
+      // Rechtstreeks naar de centrale API, zodat deze functie niet afhankelijk is
+      // van een mogelijk oudere services/api.ts in de browserbundel.
+      const cfg = apiService.getCloudConfig();
+      const res = await fetch(
+        `https://www.krauker.be/pos-data/api.php?action=delete_session&_=${Date.now()}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({
+            sessionId,
+            mode: activeMode,
+            syncId: cfg?.syncId || '',
+          }),
+        }
+      );
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data || data.status !== 'success') {
+        alert(
+          `Shift kon niet centraal verwijderd worden.\n\n` +
+          `HTTP: ${res.status}\n` +
+          `Melding: ${data?.message || 'Geen geldige serverrespons'}`
+        );
+        return;
       }
-    } catch (e) {
-      console.warn('Historiek refresh na delete mislukt', e);
+
+      // Meteen lokaal verwijderen.
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      setTransactions(prev => prev.filter(t => t.sessionId !== sessionId));
+      if (previewSession?.id === sessionId) setPreviewSession(null);
+
+      // Server onmiddellijk opnieuw controleren.
+      const verify = await fetch(
+        `https://www.krauker.be/pos-data/api.php?action=get_delta&mode=${encodeURIComponent(activeMode)}&syncId=${encodeURIComponent(cfg?.syncId || '')}&_=${Date.now()}`,
+        { cache: 'no-store' }
+      );
+      const delta = await verify.json().catch(() => null);
+
+      if (!verify.ok || !delta || delta.status !== 'success') {
+        alert(
+          `Shift is verwijderd, maar controle van de historiek mislukte.\n\n` +
+          `HTTP: ${verify.status}\n` +
+          `Melding: ${delta?.message || 'Geen geldige serverrespons'}`
+        );
+        return;
+      }
+
+      const serverSessions = Array.isArray(delta.sessions) ? delta.sessions as SalesSession[] : [];
+      const stillExists = serverSessions.some(s => s.id === sessionId);
+
+      if (stillExists) {
+        alert(
+          `De server meldt "success", maar shift ${sessionId.slice(-8)} staat nog steeds in get_delta.\n\n` +
+          `Dit wijst op een server-side opslagprobleem in api.php/orders.json/deleted_sessions.json.`
+        );
+        // Laat serverhistoriek zien zodat we geen schijnbare lokale delete tonen.
+        setSessions(prev => reconcileSessionsFromServer(prev, serverSessions));
+        return;
+      }
+
+      // Definitief reconciliëren met centrale waarheid.
+      setSessions(prev => reconcileSessionsFromServer(prev, serverSessions));
+    } catch (e: any) {
+      console.error('Delete shift error:', e);
+      alert(
+        `Shift verwijderen gaf een technische fout:\n\n${e?.message || String(e)}`
+      );
     }
   };
 
