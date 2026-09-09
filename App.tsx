@@ -228,12 +228,23 @@ export default function App() {
   }, [cart]);
 
   const initiatePayment = (method: PaymentMethod) => {
-  if (!currentSession || cart.length === 0) return;
-  if (!company.sellerName) { setShowSalesmanSelection(true); return; }
+    if (!currentSession || cart.length === 0) return;
+    if (!company.sellerName) {
+      setShowSalesmanSelection(true);
+      return;
+    }
 
-  // Direct afhandelen voor zowel Kaart als Contant
-  finalizePayment(method);
-};
+    // Bij kaartbetaling eerst bevestigen dat de terminalbetaling gelukt is.
+    // Tot dan wordt er nog geen ticket opgeslagen, gesynchroniseerd,
+    // afgedrukt of van de stock afgetrokken.
+    if (method === PaymentMethod.CARD) {
+      setIsPendingCardConfirmation(true);
+      return;
+    }
+
+    // Contante betaling mag meteen worden afgehandeld.
+    finalizePayment(method);
+  };
 
   const applyStockReduction = (items: CartItem[]) => {
     setProducts(prev =>
@@ -1015,6 +1026,40 @@ export default function App() {
             <button onClick={() => setShowSalesmanSelection(false)} className="w-full text-slate-400 font-bold text-xs py-2">
               Annuleren
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: KAARTBETALING BEVESTIGEN */}
+      {isPendingCardConfirmation && (
+        <div className="fixed inset-0 z-[700] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 space-y-6 animate-in zoom-in-95">
+            <div className="text-center space-y-2">
+              <h3 className="font-bold text-xl text-slate-900">Kaartbetaling</h3>
+              <p className="text-sm text-slate-500">
+                Is de kaartbetaling van <span className="font-black text-slate-900">€ {totals.total.toFixed(2)}</span> gelukt?
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => finalizePayment(PaymentMethod.CARD)}
+                className="p-4 bg-emerald-600 text-white rounded-2xl font-black text-sm uppercase shadow-lg active:scale-95 transition-all"
+              >
+                Ja, betaling gelukt
+              </button>
+
+              <button
+                onClick={() => setIsPendingCardConfirmation(false)}
+                className="p-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm uppercase active:scale-95 transition-all"
+              >
+                Nee, annuleren
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+              Bij annuleren blijft de winkelmand behouden en wordt geen ticket aangemaakt.
+            </p>
           </div>
         </div>
       )}
