@@ -222,6 +222,16 @@ export default function App() {
     setTransactions(prev => prev.filter(t => t.sessionId !== sessionId));
 
     if (previewSession?.id === sessionId) setPreviewSession(null);
+
+    // Meteen opnieuw de centrale waarheid ophalen.
+    try {
+      const delta = await apiService.serverPullDelta();
+      if (Array.isArray(delta?.sessions)) {
+        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[]));
+      }
+    } catch (e) {
+      console.warn('Historiek refresh na delete mislukt', e);
+    }
   };
 
   const totals = useMemo(() => {
@@ -288,6 +298,21 @@ export default function App() {
   const pendingOpenKey = () => `barpos_pending_open_${activeMode || 'NONE'}`;
   const pendingCloseKey = () => `barpos_pending_close_${activeMode || 'NONE'}`;
 
+  // Voor gesloten shifthistoriek is de server de centrale waarheid.
+  // Een gewone merge kan een verwijderde shift nooit weghalen:
+  // als de server hem niet meer terugstuurt, blijft de lokale kopie bestaan.
+  const reconcileSessionsFromServer = (local: SalesSession[], incoming: SalesSession[]) => {
+    const serverIds = new Set(incoming.map(s => s.id));
+    const pendingCloseId = localStorage.getItem(pendingCloseKey());
+
+    const localToPreserve = local.filter(s =>
+      !serverIds.has(s.id) &&
+      (s.status === 'OPEN' || (pendingCloseId !== null && s.id === pendingCloseId))
+    );
+
+    return mergeByIdNewest(localToPreserve, incoming);
+  };
+
   const syncCentralShift = async () => {
     if (!activeMode || !isAuthenticated || syncInProgressRef.current) return;
 
@@ -310,8 +335,8 @@ export default function App() {
       // Dit moet buiten de 'remoteSession'-controle staan, want zodra een
       // shift gesloten is, is active_session = null terwijl delta.sessions
       // net de gesloten shift(s) bevat.
-      if (delta.sessions?.length) {
-        setSessions(prev => mergeByIdNewest(prev, delta.sessions as SalesSession[]));
+      if (Array.isArray(delta.sessions)) {
+        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[]));
       }
 
       if (remoteSession) {
@@ -440,8 +465,8 @@ export default function App() {
       if (delta?.transactions?.length) {
         setTransactions(prev => mergeByIdNewest(prev, delta.transactions as any));
       }
-      if (delta?.sessions?.length) {
-        setSessions(prev => mergeByIdNewest(prev, delta.sessions as any));
+      if (Array.isArray(delta?.sessions)) {
+        setSessions(prev => reconcileSessionsFromServer(prev, delta.sessions as SalesSession[]));
       }
       if (delta?.company) {
         setCompany(delta.company as any);
