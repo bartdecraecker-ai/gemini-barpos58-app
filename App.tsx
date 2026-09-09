@@ -199,16 +199,24 @@ export default function App() {
     }
   };
 
-  const deleteSessionFromHistory = (sessionId: string) => {
+  const deleteSessionFromHistory = async (sessionId: string) => {
     const sess = sessions.find(x => x.id === sessionId);
     if (!sess) return;
 
     const ok = confirm(
       `Shift verwijderen?\n\nID: ${sess.id.slice(-8)}\nDatum: ${
         sess.endTime ? new Date(sess.endTime).toLocaleDateString('nl-NL') : ''
-      }\n\nLet op: bijhorende tickets van deze shift worden ook verwijderd.`
+      }\n\nLet op: bijhorende tickets van deze shift worden ook verwijderd op alle toestellen.`
     );
     if (!ok) return;
+
+    // Eerst centraal verwijderen. Anders zou de 10-seconden-sync
+    // het lokaal verwijderde rapport opnieuw uit de serverhistoriek ophalen.
+    const deletedOnServer = await apiService.serverDeleteSession(sessionId);
+    if (!deletedOnServer) {
+      alert('Shift kon niet centraal verwijderd worden. Probeer opnieuw wanneer er verbinding is.');
+      return;
+    }
 
     setSessions(prev => prev.filter(s => s.id !== sessionId));
     setTransactions(prev => prev.filter(t => t.sessionId !== sessionId));
