@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ShoppingBag, Trash2, Banknote, BarChart3, Settings, Plus, Minus, X, 
   CheckCircle, PlayCircle, Lock, Loader2, User, ChevronDown, 
@@ -45,6 +45,19 @@ export default function App() {
   const [endCashInput, setEndCashInput] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newStaffName, setNewStaffName] = useState('');
+
+  // Refs voor stabiele multi-device synchronisatie zonder stale interval-state.
+  const currentSessionRef = useRef<SalesSession | null>(null);
+  const transactionsRef = useRef<Transaction[]>([]);
+  const sessionsRef = useRef<SalesSession[]>([]);
+  const syncInProgressRef = useRef(false);
+  const lastServerSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    currentSessionRef.current = currentSession;
+    transactionsRef.current = transactions;
+    sessionsRef.current = sessions;
+  }, [currentSession, transactions, sessions]);
 
   const themeBg = activeMode === 'SHOP' ? 'bg-amber-500' : 'bg-indigo-500';
   const themeAccent = activeMode === 'SHOP' ? 'text-amber-500' : 'text-indigo-500';
@@ -253,6 +266,114 @@ export default function App() {
     return Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   };
 
+  const pendingOpenKey = () => `barpos_pending_open_${activeMode || 'NONE'}`;
+  const pendingCloseKey = () => `barpos_pending_close_${activeMode || 'NONE'}`;
+
+  const syncCentralShift = async () => {
+    if (!activeMode || !isAuthenticated || syncInProgressRef.current) return;
+
+    syncInProgressRef.current = true;
+    try {
+      const delta = await apiService.serverPullDelta();
+      if (!delta) return;
+
+      const remoteSession = delta.active_session || null;
+      const remoteTransactions = (delta.transactions || []) as Transaction[];
+
+      if (delta.products?.length) {
+        setProducts(prev => mergeByIdNewest(prev, delta.products as Product[]).slice(0, 10));
+      }
+      if (delta.company) {
+        setCompany(delta.company as CompanyDetails);
+      }
+
+      if (remoteSession) {
+        lastServerSessionIdRef.current = remoteSession.id;
+
+        setCurrentSession(prev => {
+          if (!prev || prev.id !== remoteSession.id) return remoteSession;
+          return (remoteSession.updatedAt || 0) >= (prev.updatedAt || 0) ? remoteSession : prev;
+        });
+
+        setSessions(prev => mergeByIdNewest(prev, [remoteSession]));
+        if (remoteTransactions.length) {
+          setTransactions(prev => mergeByIdNewest(prev, remoteTransactions));
+        }
+
+        // Een lokaal geopende shift die intussen door de server is bevestigd.
+        if (localStorage.getItem(pendingOpenKey()) === remoteSession.id) {
+          localStorage.removeItem(pendingOpenKey());
+        }
+
+        // Als dit toestel de shift offline sloot, probeer de sluiting opnieuw.
+        const pendingCloseId = localStorage.getItem(pendingCloseKey());
+        if (pendingCloseId === remoteSession.id) {
+          const localClosed = sessionsRef.current.find(
+            s => s.id === remoteSession.id && s.status === 'CLOSED'
+          );
+          if (localClosed) {
+            const closeOk = await apiService.serverPushSession(localClosed);
+            if (closeOk) localStorage.removeItem(pendingCloseKey());
+          }
+        }
+
+        // Push alleen lokale tickets van de centrale actieve shift die de server nog niet kent.
+        const remoteIds = new Set(remoteTransactions.map(t => t.id));
+        const pendingSales = transactionsRef.current.filter(
+          t => t.sessionId === remoteSession.id && !remoteIds.has(t.id)
+        );
+
+        for (const tx of pendingSales) {
+          await apiService.serverPushSale(tx);
+        }
+      } else {
+        const localSession = currentSessionRef.current;
+        const pendingOpenId = localStorage.getItem(pendingOpenKey());
+        const pendingCloseId = localStorage.getItem(pendingCloseKey());
+
+        // Alleen een expliciet als "offline geopend" gemarkeerde shift opnieuw openen.
+        if (localSession && pendingOpenId === localSession.id) {
+          const openOk = await apiService.serverPushSession(localSession);
+          if (openOk) {
+            localStorage.removeItem(pendingOpenKey());
+            lastServerSessionIdRef.current = localSession.id;
+          }
+        } else if (
+          localSession &&
+          lastServerSessionIdRef.current === localSession.id
+        ) {
+          // Deze shift stond eerder centraal open en is nu op een ander toestel gesloten.
+          setCurrentSession(null);
+          setSessions(prev =>
+            prev.filter(s => !(s.id === localSession.id && s.status === 'OPEN'))
+          );
+          lastServerSessionIdRef.current = null;
+        }
+
+        // Als de server geen actieve shift meer heeft, is een pending close afgehandeld.
+        if (pendingCloseId) {
+          localStorage.removeItem(pendingCloseKey());
+        }
+      }
+    } catch (e) {
+      console.warn('Central shift sync failed', e);
+    } finally {
+      syncInProgressRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!activeMode || !isAuthenticated || isInitialLoading) return;
+
+    // Meteen één keer synchroniseren en daarna om de 10 seconden.
+    syncCentralShift();
+    const interval = window.setInterval(syncCentralShift, 10000);
+
+    return () => window.clearInterval(interval);
+    // syncCentralShift gebruikt refs voor de actuele transacties/sessies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMode, isAuthenticated, isInitialLoading]);
+
   const finalizePayment = async (method: PaymentMethod) => {
     setIsPendingCardConfirmation(false);
 
@@ -279,7 +400,11 @@ export default function App() {
     setShowSuccess(true);
 
     try {
-      await apiService.serverPushSale(tx);
+      const pushed = await apiService.serverPushSale(tx);
+      if (!pushed) {
+        console.warn("Ticket lokaal bewaard; server sync wordt later opnieuw geprobeerd:", tx.id);
+      }
+
       const delta = await apiService.serverPullDelta();
 
       if (delta?.products?.length) {
@@ -355,8 +480,16 @@ export default function App() {
 
     (async () => {
       try {
-        await apiService.serverPushSession(closed as any);
+        const ok = await apiService.serverPushSession(closed);
+        if (ok) {
+          localStorage.removeItem(pendingCloseKey());
+          localStorage.removeItem(pendingOpenKey());
+          lastServerSessionIdRef.current = null;
+        } else {
+          localStorage.setItem(pendingCloseKey(), closed.id);
+        }
       } catch (e) {
+        localStorage.setItem(pendingCloseKey(), closed.id);
         console.warn("Server session CLOSE sync failed", e);
       }
 
@@ -538,21 +671,49 @@ export default function App() {
                     />
                   </div>
                   <button
-                    onClick={() => {
-                      const sess = {
-                        id: `SES-${Date.now()}`,
-                        startTime: Date.now(),
+                    onClick={async () => {
+                      const now = Date.now();
+                      const sess: SalesSession = {
+                        id: `SES-${now}`,
+                        startTime: now,
                         startCash: parseFloat(startFloatAmount) || 0,
-                        status: 'OPEN' as const,
-                        updatedAt: Date.now()
+                        status: 'OPEN',
+                        updatedAt: now
                       };
 
+                      // Eerst lokaal starten: de kassa blijft bruikbaar als internet tijdelijk uitvalt.
                       setCurrentSession(sess);
-                      setSessions(prev => [sess, ...prev]);
+                      setSessions(prev => [sess, ...prev.filter(s => s.id !== sess.id)]);
 
                       try {
-                        apiService.serverPushSession(sess as any);
+                        const ok = await apiService.serverPushSession(sess);
+                        if (ok) {
+                          localStorage.removeItem(pendingOpenKey());
+                          lastServerSessionIdRef.current = sess.id;
+                        } else {
+                          // Alleen deze expliciet offline geopende shift mag later automatisch opnieuw gepusht worden.
+                          localStorage.setItem(pendingOpenKey(), sess.id);
+
+                          // Misschien bestaat er centraal al een shift van een ander toestel.
+                          const delta = await apiService.serverPullDelta();
+                          if (delta?.active_session && delta.active_session.id !== sess.id) {
+                            localStorage.removeItem(pendingOpenKey());
+                            setCurrentSession(delta.active_session);
+                            setSessions(prev => mergeByIdNewest(
+                              prev.filter(s => s.id !== sess.id),
+                              [delta.active_session as SalesSession]
+                            ));
+                            if (delta.transactions?.length) {
+                              setTransactions(prev => mergeByIdNewest(
+                                prev,
+                                delta.transactions as Transaction[]
+                              ));
+                            }
+                            lastServerSessionIdRef.current = delta.active_session.id;
+                          }
+                        }
                       } catch (e) {
+                        localStorage.setItem(pendingOpenKey(), sess.id);
                         console.warn("Server session OPEN sync failed", e);
                       }
                     }}
