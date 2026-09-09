@@ -123,7 +123,8 @@ export const apiService = {
       warn('serverPullDelta failed:', e);
       return null;
     }
-  }
+  },
+
   async serverPushSale(transaction: Transaction): Promise<boolean> {
     const mode = this.getActiveMode();
     if (!mode) return false;
@@ -144,7 +145,8 @@ export const apiService = {
       warn('serverPushSale failed:', e);
       return false;
     }
-  }
+  },
+
   async serverPushSession(session: SalesSession | null): Promise<boolean> {
     const mode = this.getActiveMode();
     if (!mode || !session) return false;
@@ -165,7 +167,8 @@ export const apiService = {
       warn('serverPushSession failed:', e);
       return false;
     }
-  }
+  },
+
   async pushToCloud(config: CloudConfig, products: Product[], company: CompanyDetails): Promise<boolean> {
     const mode = this.getActiveMode();
     if (!mode || !config.syncId) return false;
