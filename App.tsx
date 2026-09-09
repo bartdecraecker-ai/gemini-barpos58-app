@@ -287,6 +287,14 @@ export default function App() {
         setCompany(delta.company as CompanyDetails);
       }
 
+      // Synchroniseer ook altijd de volledige shift-historiek.
+      // Dit moet buiten de 'remoteSession'-controle staan, want zodra een
+      // shift gesloten is, is active_session = null terwijl delta.sessions
+      // net de gesloten shift(s) bevat.
+      if (delta.sessions?.length) {
+        setSessions(prev => mergeByIdNewest(prev, delta.sessions as SalesSession[]));
+      }
+
       if (remoteSession) {
         lastServerSessionIdRef.current = remoteSession.id;
 
