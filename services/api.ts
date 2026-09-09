@@ -2,14 +2,13 @@ import { Product, Transaction, SalesSession, CompanyDetails, CloudConfig } from 
 
 export type AppMode = 'SHOP' | 'TOUR';
 
-// URL naar de centrale PHP backend op je server
-const SERVER_URL = 'https://www.krauker.be/api.php';
+// Centrale PHP backend.
+// api.php staat in /pos-data/ op www.krauker.be.
+const SERVER_URL = 'https://www.krauker.be/pos-data/api.php';
 
-// Trim helper
 const cleanSyncId = (s: string) => (s || '').trim();
-
-// Local storage key per modus
 const cloudConfigKey = (mode: AppMode) => `barpos_cloud_config_${mode}`;
+const pendingSalesKey = (mode: AppMode) => `barpos_pending_sales_${mode}`;
 
 const DEBUG = true;
 
@@ -29,6 +28,22 @@ function isCompany(x: any): x is CompanyDetails {
   return !!x && typeof x === 'object' && typeof (x as any).name === 'string';
 }
 
+function getPendingSales(mode: AppMode): Transaction[] {
+  try {
+    const raw = localStorage.getItem(pendingSalesKey(mode));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingSales(mode: AppMode, sales: Transaction[]) {
+  if (sales.length === 0) localStorage.removeItem(pendingSalesKey(mode));
+  else localStorage.setItem(pendingSalesKey(mode), JSON.stringify(sales));
+}
+
 export const apiService = {
   getActiveMode(): AppMode | null {
     return (localStorage.getItem('barpos_active_mode') as AppMode) || null;
@@ -43,8 +58,12 @@ export const apiService = {
     const mode = this.getActiveMode();
     if (!mode) return { syncId: '', isAutoSync: false };
 
-    const raw = localStorage.getItem(cloudConfigKey(mode));
-    return raw ? JSON.parse(raw) : { syncId: '', isAutoSync: false };
+    try {
+      const raw = localStorage.getItem(cloudConfigKey(mode));
+      return raw ? JSON.parse(raw) : { syncId: '', isAutoSync: false };
+    } catch {
+      return { syncId: '', isAutoSync: false };
+    }
   },
 
   setCloudConfig(config: CloudConfig) {
@@ -83,65 +102,88 @@ export const apiService = {
   },
 
   // ----------------------------------------------------
-  // SERVER SYNCHRONISATIE (HTTP POST / GET naar api.php)
+  // CENTRALE SERVER SYNCHRONISATIE
   // ----------------------------------------------------
 
-  async serverPullDelta(): Promise<{ active_session?: SalesSession; transactions?: Transaction[]; products?: Product[]; company?: CompanyDetails } | null> {
+  async serverPullDelta(): Promise<{ active_session?: SalesSession | null; transactions?: Transaction[]; sessions?: SalesSession[]; products?: Product[]; company?: CompanyDetails } | null> {
+    const mode = this.getActiveMode();
+    if (!mode) return null;
+    const config = this.getCloudConfig();
+    const params = new URLSearchParams({ action: 'get_delta', mode });
+    if (config.syncId) params.set('syncId', cleanSyncId(config.syncId));
     try {
-      const res = await fetch(`${SERVER_URL}?action=get_delta`, { cache: 'no-store' });
-      if (!res.ok) return null;
-      return await res.json();
+      const res = await fetch(`${SERVER_URL}?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.status === 'error') {
+        warn('serverPullDelta failed:', data?.message || `HTTP ${res.status}`);
+        return null;
+      }
+      return data;
     } catch (e) {
       warn('serverPullDelta failed:', e);
       return null;
     }
-  },
-
+  }
   async serverPushSale(transaction: Transaction): Promise<boolean> {
+    const mode = this.getActiveMode();
+    if (!mode) return false;
+    const config = this.getCloudConfig();
     try {
       const res = await fetch(`${SERVER_URL}?action=push_sale`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(transaction),
+        body: JSON.stringify({ ...transaction, mode, syncId: cleanSyncId(config.syncId) }),
       });
-      return res.ok;
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.status !== 'success') {
+        warn('serverPushSale failed:', data?.message || `HTTP ${res.status}`);
+        return false;
+      }
+      return true;
     } catch (e) {
       warn('serverPushSale failed:', e);
       return false;
     }
-  },
-
-async serverPushSession(session: SalesSession | null): Promise<boolean> {
+  }
+  async serverPushSession(session: SalesSession | null): Promise<boolean> {
+    const mode = this.getActiveMode();
+    if (!mode || !session) return false;
+    const config = this.getCloudConfig();
     try {
       const res = await fetch(`${SERVER_URL}?action=push_session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(session),
+        body: JSON.stringify({ ...session, mode, syncId: cleanSyncId(config.syncId) }),
       });
-      return res.ok;
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.status !== 'success') {
+        warn('serverPushSession failed:', data?.message || `HTTP ${res.status}`);
+        return false;
+      }
+      return true;
     } catch (e) {
       warn('serverPushSession failed:', e);
       return false;
     }
-  },
-  
-  // Handmatige Push/Pull knoppen in de UI
+  }
   async pushToCloud(config: CloudConfig, products: Product[], company: CompanyDetails): Promise<boolean> {
     const mode = this.getActiveMode();
-    if (!mode) return false;
+    if (!mode || !config.syncId) return false;
 
     try {
-      const payload = { products, company, timestamp: Date.now(), mode };
+      const payload = { products, company, timestamp: Date.now(), mode, syncId: cleanSyncId(config.syncId) };
       const res = await fetch(`${SERVER_URL}?action=push_config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.status === 'success') {
         this.setCloudConfig({ ...config, lastSync: Date.now() });
         return true;
       }
+      warn('pushToCloud rejected:', data || res.status);
       return false;
     } catch (e) {
       console.error('[api] Push to cloud failed', e);
@@ -150,8 +192,12 @@ async serverPushSession(session: SalesSession | null): Promise<boolean> {
   },
 
   async pullFromCloud(config: CloudConfig): Promise<{ products: Product[]; company: CompanyDetails } | null> {
+    const mode = this.getActiveMode();
+    if (!mode || !config.syncId) return null;
+
     const delta = await this.serverPullDelta();
     if (delta && delta.products && delta.company) {
+      this.setCloudConfig({ ...config, lastSync: Date.now() });
       return { products: delta.products, company: delta.company };
     }
     return null;
