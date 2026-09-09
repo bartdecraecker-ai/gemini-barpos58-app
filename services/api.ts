@@ -133,7 +133,7 @@ export const apiService = {
       const res = await fetch(`${SERVER_URL}?action=push_sale`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...transaction, mode, syncId: cleanSyncId(config.syncId) }),
+        body: JSON.stringify({ transaction, mode, syncId: cleanSyncId(config.syncId) }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.status !== 'success') {
@@ -155,7 +155,7 @@ export const apiService = {
       const res = await fetch(`${SERVER_URL}?action=push_session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...session, mode, syncId: cleanSyncId(config.syncId) }),
+        body: JSON.stringify({ session, mode, syncId: cleanSyncId(config.syncId) }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.status !== 'success') {
